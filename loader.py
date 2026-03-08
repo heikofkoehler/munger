@@ -132,8 +132,25 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
 
 
 # ---------------------------------------------------------------------------
-# 3. Deduplication
+# 3. Normalization & Deduplication
 # ---------------------------------------------------------------------------
+
+def normalize_ticker(ticker: str) -> str:
+    """
+    Normalize ticker symbols to a standard format.
+    Converts . to - (e.g., BRK.B -> BRK-B) and handles common variations.
+    """
+    if not ticker or not isinstance(ticker, str):
+        return ""
+    t = ticker.strip().upper()
+    # Standardize on Yahoo Finance format (hyphen instead of dot/slash)
+    t = t.replace(".", "-").replace("/", "-")
+    # Remove any extra spaces around the hyphen
+    if "-" in t:
+        parts = [p.strip() for p in t.split("-")]
+        t = "-".join(parts)
+    return t
+
 
 def deduplicate(df):
     """
@@ -147,6 +164,10 @@ def deduplicate(df):
     df = df.copy()
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
+    
+    # Normalize tickers before grouping
+    if "ticker" in df.columns:
+        df["ticker"] = df["ticker"].apply(normalize_ticker)
 
     # Metadata to preserve from first occurrence
     meta = df.groupby("security_id")[["ticker", "security_name", "type_display"]].first()
@@ -340,7 +361,7 @@ def calculate_risk_metrics(df) -> dict:
     ticker_names = {}       # ticker -> name (best guess)
 
     for _, row in df.iterrows():
-        ticker = row["ticker"] or f"UNKNOWN_{row['security_id']}"
+        ticker = normalize_ticker(row["ticker"] or f"UNKNOWN_{row['security_id']}")
         exposure_direct[ticker] = exposure_direct.get(ticker, 0.0) + row["value"]
         ticker_names[ticker] = row["security_name"]
 
@@ -348,7 +369,7 @@ def calculate_risk_metrics(df) -> dict:
     for fund_ticker, data in fund_holdings_map.items():
         fund_value = data["value"]
         for h in data["holdings"]:
-            h_ticker = h["ticker"]
+            h_ticker = normalize_ticker(h["ticker"])
             h_weight = h["weight"]
             indirect_value = fund_value * h_weight
             exposure_indirect[h_ticker] = exposure_indirect.get(h_ticker, 0.0) + indirect_value
