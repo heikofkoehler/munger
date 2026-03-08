@@ -15,7 +15,8 @@ from loader import (
     deduplicate,
     normalize_asset_class,
     calculate_metrics,
-    check_concentration,
+    calculate_risk_metrics,
+    save_risk_snapshot,
     calculate_institutions,
     enrich_with_market_data,
     calculate_tax_buckets,
@@ -35,12 +36,13 @@ def _build_cache() -> None:
     df = normalize_asset_class(deduplicate(df_raw))
     _cache["summary"] = {
         **calculate_metrics(df),
-        "concentration": check_concentration(df),
         "institutions": calculate_institutions(df_raw),
     }
+    _cache["df_clean"] = df
     _cache["df_raw"] = df_raw
-    # Clear derived lazy caches so next request recomputes
+    # Clear derived lazy caches
     _cache.pop("market", None)
+    _cache.pop("risk", None)
     _cache.pop("tax", None)
 
 
@@ -54,7 +56,24 @@ def root():
 
 @app.get("/api/summary")
 def summary():
-    return _cache["summary"]
+    # Return basic summary; frontend can request risk/market later
+    s = dict(_cache["summary"])
+    if "risk" in _cache:
+        s["risk"] = _cache["risk"]
+        s["concentration"] = [f for f in _cache["risk"]["true_exposure"] if f["flagged"]]
+    else:
+        s["risk"] = None
+        s["concentration"] = []
+    return s
+
+
+@app.get("/api/risk")
+def risk():
+    if "risk" not in _cache:
+        r = calculate_risk_metrics(_cache["df_clean"])
+        _cache["risk"] = r
+        save_risk_snapshot(r)
+    return _cache["risk"]
 
 
 @app.get("/api/market")

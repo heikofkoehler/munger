@@ -222,18 +222,178 @@ def calculate_metrics(df) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 6. Concentration risk
+# 6. Risk Reporting (Concentration & Cost Efficiency)
 # ---------------------------------------------------------------------------
 
 CONC_THRESHOLD = float(os.environ.get("CONC_THRESHOLD", 10.0))
+_fund_cache: dict = {}  # keyed by ticker
+
+
+def get_fund_details(ticker: str) -> dict:
+    """
+    Fetch expense ratio and top holdings for a fund ticker.
+    Returns: {"expense_ratio": float or None, "holdings": [{"ticker": str, "weight": float}, ...]}
+    """
+    import yfinance as yf
+    import pandas as pd
+
+    if ticker in _fund_cache:
+        return _fund_cache[ticker]
+
+    try:
+        t = yf.Ticker(ticker)
+        info = t.info
+        expense_ratio = info.get("netExpenseRatio") or info.get("expenseRatio")
+
+        holdings = []
+        if hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
+            df_holdings = t.funds_data.top_holdings
+            if not df_holdings.empty:
+                # The index is the ticker symbol
+                for symbol, row in df_holdings.iterrows():
+                    weight = row.get("Holding Percent") or row.get("Weight") or 0.0
+                    holdings.append({"ticker": str(symbol), "weight": float(weight)})
+
+        res = {"expense_ratio": expense_ratio, "holdings": holdings}
+        _fund_cache[ticker] = res
+        return res
+    except Exception as e:
+        print(f"Error fetching fund details for {ticker}: {e}", file=sys.stderr)
+        return {"expense_ratio": None, "holdings": []}
+
+
+def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
+    """
+    Save a snapshot of risk metrics (WER and total cost) to a local SQLite database.
+    """
+    import sqlite3
+    from datetime import datetime
+
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS risk_snapshots (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                wer REAL NOT NULL,
+                total_annual_cost REAL NOT NULL
+            )
+        """)
+        
+        cursor.execute("""
+            INSERT INTO risk_snapshots (timestamp, wer, total_annual_cost)
+            VALUES (?, ?, ?)
+        """, (
+            datetime.now().isoformat(),
+            risk_data["wer"],
+            risk_data["total_annual_cost"]
+        ))
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"Error saving risk snapshot: {e}", file=sys.stderr)
+
+
+def calculate_risk_metrics(df) -> dict:
+    """
+    Calculate True Exposure (direct + indirect) and Weighted Expense Ratio.
+
+    Returns:
+    {
+        "true_exposure": [{"ticker": str, "security_name": str, "value": float, "weight_pct": float, "direct": float, "indirect": float, "flagged": bool}, ...],
+        "wer": float,
+        "total_annual_cost": float,
+    }
+    """
+    total_value = df["value"].sum()
+    if total_value == 0:
+        return {"true_exposure": [], "wer": 0.0, "total_annual_cost": 0.0}
+
+    # 1. Identify Funds (ETF/Mutual Fund) and calculate costs
+    total_annual_cost = 0.0
+    fund_holdings_map = {}  # fund_ticker -> {holdings: [...]}
+    funds_to_exclude = set()
+
+    for _, row in df.iterrows():
+        is_fund = row["type_display"] in ["ETF", "Mutual Fund"]
+        if is_fund and row["ticker"]:
+            details = get_fund_details(row["ticker"])
+            if details["expense_ratio"]:
+                pos_cost = row["value"] * details["expense_ratio"]
+                total_annual_cost += pos_cost
+
+            if details["holdings"]:
+                fund_holdings_map[row["ticker"]] = {
+                    "holdings": details["holdings"],
+                    "value": row["value"]
+                }
+                funds_to_exclude.add(row["ticker"])
+
+    wer = total_annual_cost / total_value
+
+    # 2. Calculate True Exposure
+    # Separate direct and indirect exposures
+    exposure_direct = {}    # ticker -> value
+    exposure_indirect = {}  # ticker -> value
+    ticker_names = {}       # ticker -> name (best guess)
+
+    for _, row in df.iterrows():
+        ticker = row["ticker"] or f"UNKNOWN_{row['security_id']}"
+        exposure_direct[ticker] = exposure_direct.get(ticker, 0.0) + row["value"]
+        ticker_names[ticker] = row["security_name"]
+
+    # Add indirect exposures from funds
+    for fund_ticker, data in fund_holdings_map.items():
+        fund_value = data["value"]
+        for h in data["holdings"]:
+            h_ticker = h["ticker"]
+            h_weight = h["weight"]
+            indirect_value = fund_value * h_weight
+            exposure_indirect[h_ticker] = exposure_indirect.get(h_ticker, 0.0) + indirect_value
+            if h_ticker not in ticker_names:
+                ticker_names[h_ticker] = f"Indirect: {h_ticker}"
+
+    # Prepare results
+    all_tickers = set(exposure_direct.keys()) | set(exposure_indirect.keys())
+    true_exposure = []
+    for ticker in all_tickers:
+        # If it's a fund we looked through, we don't list it as a stock, 
+        # but we might want to keep it if it has no underlying (already handled by set logic)
+        if ticker in funds_to_exclude and ticker not in exposure_indirect:
+            # It's a fund we expanded, so we don't show it as its own ticker 
+            # UNLESS it was also an indirect holding of another fund (unlikely but possible)
+            continue
+
+        dir_val = exposure_direct.get(ticker, 0.0)
+        ind_val = exposure_indirect.get(ticker, 0.0)
+        total_val = dir_val + ind_val
+        weight_pct = (total_val / total_value * 100)
+        
+        true_exposure.append({
+            "ticker": ticker,
+            "security_name": ticker_names.get(ticker, ticker),
+            "value": round(float(total_val), 2),
+            "direct": round(float(dir_val), 2),
+            "indirect": round(float(ind_val), 2),
+            "weight_pct": round(float(weight_pct), 4),
+            "flagged": bool(weight_pct > CONC_THRESHOLD)
+        })
+
+    true_exposure.sort(key=lambda x: x["weight_pct"], reverse=True)
+
+    return {
+        "true_exposure": true_exposure,
+        "wer": round(float(wer), 6),
+        "total_annual_cost": round(float(total_annual_cost), 2),
+    }
 
 
 def check_concentration(df) -> list:
     """
+    Deprecated: use calculate_risk_metrics instead.
     Flag any position whose portfolio weight exceeds CONC_THRESHOLD.
-
-    Returns list of dicts: {"ticker", "security_name", "weight_pct", "threshold", "flagged"},
-    sorted by weight descending. All positions above the threshold are included.
     """
     total = df["value"].sum()
     results = []

@@ -488,6 +488,7 @@
 <div class="layout">
 <nav class="sidebar">
   <button class="tab-btn active" onclick="switchTab('portfolio')">Portfolio</button>
+  <button class="tab-btn" onclick="switchTab('risk')">Risk</button>
   <button class="tab-btn" onclick="switchTab('dividends')">Dividends</button>
   <button class="tab-btn" onclick="switchTab('earnings')">Earnings</button>
   <button class="tab-btn" onclick="switchTab('accounts')">Accounts</button>
@@ -535,6 +536,11 @@
         <tbody id="positions-body"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- ── Risk tab ── -->
+  <div id="panel-risk" class="tab-panel">
+    <div id="risk-content"></div>
   </div>
 
   <!-- ── Dividends tab ── -->
@@ -608,7 +614,9 @@
       panel.classList.toggle('active', panel.id === `panel-${name}`);
     });
 
-    if (name === 'dividends') {
+    if (name === 'risk') {
+      loadRisk();
+    } else if (name === 'dividends') {
       loadDividends();
     } else if (name === 'earnings') {
       loadEarnings();
@@ -619,6 +627,22 @@
 
   function spinner(msg = 'Fetching market data… (~16s first visit)') {
     return `<div class="spinner-wrap"><div class="spinner"></div><div>${msg}</div></div>`;
+  }
+
+  // ── Risk lazy load ────────────────────────────────────────────
+  async function loadRisk() {
+    if (_summaryData && _summaryData.risk) { renderRisk(_summaryData); return; }
+    document.getElementById('risk-content').innerHTML = spinner('Analyzing fund holdings and concentration… (~12s)');
+    try {
+      const risk = await fetch('/api/risk').then(r => r.json());
+      _summaryData.risk = risk;
+      _summaryData.concentration = risk.true_exposure.filter(f => f.flagged);
+      renderRisk(_summaryData);
+      renderFlags(_summaryData); // Update flags on main portfolio tab too
+    } catch (err) {
+      document.getElementById('risk-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load risk data: ${err.message}</div>`;
+    }
   }
 
   // ── Dividends lazy load (needs market + tax) ─────────────────
@@ -822,7 +846,95 @@
     renderFlags(data);
     renderInstitutions(data);
     renderPositions(data);
+    if (data.risk) renderRisk(data);
+    else document.getElementById('risk-content').innerHTML = `<div class="spinner-wrap" style="color:var(--text-muted)">Risk analysis not yet calculated. Visit the <strong>Risk</strong> tab to start.</div>`;
     document.querySelectorAll('#panel-portfolio table').forEach(makeSortable);
+  }
+
+  // ── Risk renderer ─────────────────────────────────────────────
+  function renderRisk(data) {
+    if (!data || !data.risk) return;
+    const risk = data.risk;
+    const panel = document.getElementById('risk-content');
+
+    // Portfolio Efficiency Score (100 - (WER * 10000) capped at 0-100)
+    // Benchmark: 0.10% (10 bps) = 90 score, 0.50% (50 bps) = 50 score
+    const werPct = risk.wer * 100;
+    const efficiencyScore = Math.max(0, Math.min(100, 100 - (werPct * 100)));
+    let scoreColor = 'var(--accent-teal)';
+    if (efficiencyScore < 70) scoreColor = 'var(--accent-amber)';
+    if (efficiencyScore < 40) scoreColor = 'var(--accent-red)';
+
+    const trueExposures = risk.true_exposure.map(f => {
+      const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
+      const ticker = tickerLink(f.ticker);
+      const breakdown = f.indirect > 0 
+        ? `<div style="font-size:11px; color:var(--text-muted)">Dir: ${fmtDollar(f.direct)} · Ind: ${fmtDollar(f.indirect)}</div>`
+        : '';
+      return `
+        <tr>
+          <td class="td-ticker">${ticker}</td>
+          <td class="td-name">
+            ${f.security_name}
+            ${breakdown}
+          </td>
+          <td class="td-value">${fmtDollar(f.value)}</td>
+          <td class="td-weight" style="color:${color}; font-weight:${f.flagged ? '700' : '400'}">
+            ${fmtPct(f.weight_pct)}
+            ${f.flagged ? ' <span title="Over 10% threshold">⚠️</span>' : ''}
+          </td>
+        </tr>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div class="grid-2">
+        <div class="card" style="text-align:center">
+          <div class="card-title">Portfolio Efficiency</div>
+          <div class="hero-value" style="color:${scoreColor}">${efficiencyScore.toFixed(0)}</div>
+          <div class="hero-sub">Efficiency Score</div>
+          <div style="margin-top:1rem; font-size:13px; color:var(--text-secondary)">
+            Weighted Expense Ratio: <strong>${(risk.wer * 100).toFixed(3)}%</strong><br>
+            Total Annual Fund Costs: <strong>${fmtDollar(risk.total_annual_cost)}</strong>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Concentration Heatmap</div>
+          <div style="height: 120px; display: flex; align-items: flex-end; gap: 4px;">
+            ${risk.true_exposure.slice(0, 15).map(f => {
+              const h = Math.max(5, f.weight_pct * 5); // scale for visual
+              const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
+              return `<div style="flex:1; background:${color}; height:${h}%; border-radius: 2px 2px 0 0;" title="${f.ticker}: ${fmtPct(f.weight_pct)}"></div>`;
+            }).join('')}
+          </div>
+          <div style="display:flex; justify-content:space-between; margin-top:0.5rem; font-size:11px; color:var(--text-muted)">
+            <span>Highest Exposure</span>
+            <span>Top 15 Assets</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Aggregated Single-Stock Concentration (True Exposure)</div>
+        <div class="hero-sub" style="margin-bottom:1rem">
+          Includes direct holdings + proportional holdings from ETFs & Mutual Funds.
+          Flagged if > 10% of total Net Worth.
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th>True Value</th>
+              <th>True Weight</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${trueExposures}
+          </tbody>
+        </table>
+      </div>
+    `;
+    document.querySelectorAll('#panel-risk table').forEach(makeSortable);
   }
 
   // ── Dividends renderer ────────────────────────────────────────
