@@ -73,8 +73,50 @@
     #refresh-btn:hover { border-color: var(--accent-purple); color: var(--text-primary); }
     #refresh-btn:disabled { opacity: 0.4; cursor: default; }
 
+    /* ── Sidebar ─────────────────────────────────────────────── */
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 56px);
+    }
+    .sidebar {
+      width: 168px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border-right: 1px solid var(--border);
+      position: sticky;
+      top: 56px;
+      height: calc(100vh - 56px);
+      overflow-y: auto;
+      padding: 1.25rem 0;
+    }
+    .tab-btn {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: none;
+      border-left: 3px solid transparent;
+      color: var(--text-secondary);
+      padding: 10px 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.15s, background 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: var(--text-primary); background: rgba(255,255,255,0.03); }
+    .tab-btn.active {
+      color: var(--accent-purple);
+      border-left-color: var(--accent-purple);
+      background: rgba(108,99,255,0.08);
+    }
+
     /* ── Layout ─────────────────────────────────────────────── */
-    .page { max-width: 1280px; margin: 0 auto; padding: 2rem 2rem 4rem; }
+    .content { flex: 1; min-width: 0; }
+    .page { padding: 2rem 2.5rem 4rem; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
     .card {
       background: var(--bg-card);
@@ -117,6 +159,11 @@
       font-size: 13px;
       color: var(--text-muted);
     }
+    .hero-sub {
+      margin-top: 0.5rem;
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
 
     /* ── 2-column grid ──────────────────────────────────────── */
     .grid-2 {
@@ -126,6 +173,15 @@
       margin-bottom: 1.5rem;
     }
     .grid-2 .card { margin-bottom: 0; }
+
+    /* ── 3-column grid ──────────────────────────────────────── */
+    .grid-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .grid-3 .card { margin-bottom: 0; }
 
     /* ── Sunburst ───────────────────────────────────────────── */
     #sunburst-chart { height: 380px; }
@@ -226,7 +282,7 @@
       text-align: right;
     }
 
-    /* ── Positions table ────────────────────────────────────── */
+    /* ── Tables ─────────────────────────────────────────────── */
     table {
       width: 100%;
       border-collapse: collapse;
@@ -278,6 +334,87 @@
       font-size: 12px;
       margin-left: 4px;
     }
+    .td-muted { color: var(--text-muted); }
+    .td-num { font-variant-numeric: tabular-nums; }
+
+    /* ── Spinner ─────────────────────────────────────────────── */
+    .spinner-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 4rem;
+      gap: 1rem;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent-purple);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Tax bucket cards ────────────────────────────────────── */
+    .bucket-hero-card {
+      text-align: center;
+      padding: 1.5rem 1rem;
+    }
+    .bucket-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+    }
+    .bucket-value {
+      font-size: 30px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1.1;
+    }
+    .bucket-pct {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .tax-bucket-card { margin-bottom: 1.5rem; }
+    .tax-account-row {
+      padding: 0.75rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .tax-account-row:last-child { border-bottom: none; }
+    .tax-account-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 0.4rem;
+    }
+    .tax-account-name { font-size: 13px; color: var(--text-primary); font-weight: 500; }
+    .tax-account-inst { font-size: 12px; color: var(--text-muted); }
+    .tax-account-val { font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .tax-bar-wrap {
+      background: var(--bg-card-2);
+      border-radius: 4px;
+      height: 5px;
+      overflow: hidden;
+    }
+    .tax-bar {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent-blue);
+      transition: width 0.4s ease;
+    }
+    .tax-note {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
 
     /* ── Loading state ──────────────────────────────────────── */
     #loading {
@@ -299,50 +436,77 @@
   <button id="refresh-btn" onclick="refreshData()">Refresh Data</button>
 </header>
 
+<div class="layout">
+<nav class="sidebar">
+  <button class="tab-btn active" onclick="switchTab('portfolio')">Portfolio</button>
+  <button class="tab-btn" onclick="switchTab('dividends')">Dividends</button>
+  <button class="tab-btn" onclick="switchTab('earnings')">Earnings</button>
+  <button class="tab-btn" onclick="switchTab('tax')">Tax</button>
+</nav>
+
+<div class="content">
 <div class="page">
-  <!-- Hero -->
-  <div class="hero">
-    <div class="hero-label">Net Worth</div>
-    <div id="total-value" class="hero-value">—</div>
-    <div id="price-date" class="hero-date">—</div>
-  </div>
 
-  <!-- Row 2: Sunburst + Flags -->
-  <div class="grid-2">
-    <div class="card">
-      <div class="card-title">Allocation</div>
-      <div id="sunburst-chart"></div>
-      <div id="alloc-legend" class="alloc-legend"></div>
+  <!-- ── Portfolio tab ── -->
+  <div id="panel-portfolio" class="tab-panel active">
+    <div class="hero">
+      <div class="hero-label">Net Worth</div>
+      <div id="total-value" class="hero-value">—</div>
+      <div id="price-date" class="hero-date">—</div>
     </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Allocation</div>
+        <div id="sunburst-chart"></div>
+        <div id="alloc-legend" class="alloc-legend"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Concentration Risk</div>
+        <div id="flags-panel"></div>
+      </div>
+    </div>
+
     <div class="card">
-      <div class="card-title">Concentration Risk</div>
-      <div id="flags-panel"></div>
+      <div class="card-title">By Institution</div>
+      <div id="institutions-panel"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Positions</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Value</th>
+            <th>Weight</th>
+            <th>Type</th>
+          </tr>
+        </thead>
+        <tbody id="positions-body"></tbody>
+      </table>
     </div>
   </div>
 
-  <!-- Row 3: Institutions -->
-  <div class="card">
-    <div class="card-title">By Institution</div>
-    <div id="institutions-panel"></div>
+  <!-- ── Dividends tab ── -->
+  <div id="panel-dividends" class="tab-panel">
+    <div id="div-content"></div>
   </div>
 
-  <!-- Row 4: Positions -->
-  <div class="card">
-    <div class="card-title">Positions</div>
-    <table>
-      <thead>
-        <tr>
-          <th>Ticker</th>
-          <th>Name</th>
-          <th>Value</th>
-          <th>Weight</th>
-          <th>Type</th>
-        </tr>
-      </thead>
-      <tbody id="positions-body"></tbody>
-    </table>
+  <!-- ── Earnings tab ── -->
+  <div id="panel-earnings" class="tab-panel">
+    <div id="earn-content"></div>
   </div>
+
+  <!-- ── Tax tab ── -->
+  <div id="panel-tax" class="tab-panel">
+    <div id="tax-content"></div>
+  </div>
+
 </div>
+</div><!-- .content -->
+</div><!-- .layout -->
 
 <script>
   // ── Constants ─────────────────────────────────────────────────
@@ -368,18 +532,87 @@
     return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   }
   function fmtPct(v) { return v.toFixed(2) + '%'; }
+  function fmtMktCap(v) {
+    if (!v) return '—';
+    if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
+    if (v >= 1e9)  return '$' + (v / 1e9).toFixed(1) + 'B';
+    if (v >= 1e6)  return '$' + (v / 1e6).toFixed(0) + 'M';
+    return '$' + v.toLocaleString();
+  }
+  function fmtNum(v, decimals = 2) {
+    if (v == null) return '—';
+    return Number(v).toFixed(decimals);
+  }
 
-  // ── Hero ──────────────────────────────────────────────────────
+  // ── JS state ──────────────────────────────────────────────────
+  let _summaryData = null;
+  let _marketData = null;
+  let _taxData = null;
+  let _activeTab = 'portfolio';
+
+  // ── Tab switching ─────────────────────────────────────────────
+  function switchTab(name) {
+    _activeTab = name;
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === `switchTab('${name}')`);
+    });
+    document.querySelectorAll('.tab-panel').forEach(panel => {
+      panel.classList.toggle('active', panel.id === `panel-${name}`);
+    });
+
+    if (name === 'dividends' || name === 'earnings') {
+      loadMarket(name);
+    } else if (name === 'tax') {
+      loadTax();
+    }
+  }
+
+  function spinner(msg = 'Fetching market data… (~16s first visit)') {
+    return `<div class="spinner-wrap"><div class="spinner"></div><div>${msg}</div></div>`;
+  }
+
+  // ── Market data lazy load ─────────────────────────────────────
+  async function loadMarket(tab) {
+    if (_marketData) {
+      if (tab === 'dividends') renderDividends(_marketData);
+      else renderEarnings(_marketData);
+      return;
+    }
+    const el = tab === 'dividends'
+      ? document.getElementById('div-content')
+      : document.getElementById('earn-content');
+    el.innerHTML = spinner();
+    try {
+      _marketData = await fetch('/api/market').then(r => r.json());
+      renderDividends(_marketData);
+      renderEarnings(_marketData);
+    } catch (err) {
+      el.innerHTML = `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load market data: ${err.message}</div>`;
+    }
+  }
+
+  // ── Tax data lazy load ────────────────────────────────────────
+  async function loadTax() {
+    if (_taxData) { renderTax(_taxData); return; }
+    document.getElementById('tax-content').innerHTML = spinner('Computing tax buckets…');
+    try {
+      _taxData = await fetch('/api/tax').then(r => r.json());
+      renderTax(_taxData);
+    } catch (err) {
+      document.getElementById('tax-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load tax data: ${err.message}</div>`;
+    }
+  }
+
+  // ── Portfolio renderers ───────────────────────────────────────
   function renderHero(data) {
     document.getElementById('total-value').textContent = fmtDollarFull(data.total_value);
-    // Most recent price_updated from first position (if present), else today
     const date = data._price_date
       ? new Date(data._price_date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
       : 'Latest data';
     document.getElementById('price-date').textContent = 'as of ' + date;
   }
 
-  // ── Sunburst ──────────────────────────────────────────────────
   function renderSunburst(data) {
     const labels  = ['Portfolio'];
     const parents = [''];
@@ -387,7 +620,6 @@
     const colors  = ['rgba(0,0,0,0)'];
     const texts   = [''];
 
-    // Inner ring: asset classes
     for (const [ac, pct] of Object.entries(data.allocation)) {
       labels.push(ac);
       parents.push('Portfolio');
@@ -396,20 +628,16 @@
       texts.push(ac + '<br>' + fmtPct(pct));
     }
 
-    // Outer ring: individual positions
     for (const pos of data.positions) {
       if (pos.value < 1) continue;
       const label = pos.ticker || pos.security_name.slice(0, 12);
       labels.push(label);
       parents.push(pos.type_display);
       values.push(pos.value);
-      // Slightly transparent version of asset class color
-      const base = colorFor(pos.type_display);
-      colors.push(base + 'bb');
+      colors.push(colorFor(pos.type_display) + 'bb');
       texts.push('');
     }
 
-    const isDark = true;
     Plotly.react('sunburst-chart', [{
       type: 'sunburst',
       labels, parents, values, text: texts,
@@ -430,7 +658,6 @@
       displayModeBar: false,
     });
 
-    // Legend below chart
     const legend = document.getElementById('alloc-legend');
     legend.innerHTML = Object.entries(data.allocation)
       .sort((a, b) => b[1] - a[1])
@@ -441,13 +668,12 @@
         </div>`).join('');
   }
 
-  // ── Concentration flags ───────────────────────────────────────
   function renderFlags(data) {
     const panel = document.getElementById('flags-panel');
     const flagged = data.concentration.filter(c => c.flagged);
 
     if (!flagged.length) {
-      panel.innerHTML = `<div class="no-flags">✓ No concentration flags triggered</div>`;
+      panel.innerHTML = `<div class="no-flags">&#10003; No concentration flags triggered</div>`;
       return;
     }
 
@@ -466,7 +692,6 @@
       </div>`).join('');
   }
 
-  // ── Institutions ──────────────────────────────────────────────
   function renderInstitutions(data) {
     const panel = document.getElementById('institutions-panel');
     panel.innerHTML = data.institutions.map(inst => `
@@ -480,7 +705,6 @@
       </div>`).join('');
   }
 
-  // ── Positions table ───────────────────────────────────────────
   function renderPositions(data) {
     const flaggedTickers = new Set(
       data.concentration.filter(c => c.flagged).map(c => c.ticker)
@@ -492,7 +716,7 @@
       .map(p => {
         const label = p.ticker || p.security_name.slice(0, 15);
         const flag  = flaggedTickers.has(p.ticker)
-          ? '<span class="flag-icon" title="Concentration flag">⚠</span>' : '';
+          ? '<span class="flag-icon" title="Concentration flag">&#9888;</span>' : '';
         const color = colorFor(p.type_display);
         return `
           <tr>
@@ -509,7 +733,6 @@
       }).join('');
   }
 
-  // ── Main render ───────────────────────────────────────────────
   function renderDashboard(data) {
     renderHero(data);
     renderSunburst(data);
@@ -518,14 +741,231 @@
     renderPositions(data);
   }
 
+  // ── Dividends renderer ────────────────────────────────────────
+  function renderDividends(positions) {
+    // Projected annual income = quantity * dividend_rate (per share)
+    let totalIncome = 0;
+    let totalValue = 0;
+    for (const p of positions) {
+      totalValue += p.value || 0;
+      if (p.dividend_rate && p.quantity) {
+        totalIncome += p.quantity * p.dividend_rate;
+      } else if (p.dividend_yield && p.value) {
+        totalIncome += p.value * p.dividend_yield / 100;
+      }
+    }
+    const yieldOnValue = totalValue > 0 ? (totalIncome / totalValue * 100) : 0;
+
+    const rows = positions
+      .filter(p => p.value >= 1)
+      .map(p => {
+        let income = null;
+        if (p.dividend_rate && p.quantity) {
+          income = p.quantity * p.dividend_rate;
+        } else if (p.dividend_yield && p.value) {
+          // ETFs often have yield but no per-share rate — derive from position value
+          income = p.value * p.dividend_yield / 100;
+        }
+        const divYield = p.dividend_yield != null ? p.dividend_yield : null;
+        return { ...p, _income: income, _yield: divYield };
+      })
+      .sort((a, b) => (b._income || 0) - (a._income || 0));
+
+    const tableRows = rows.map(p => {
+      const ticker = p.ticker || p.security_name.slice(0, 15);
+      const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
+      const yld = p._yield != null ? fmtNum(p._yield) + '%' : '—';
+      const inc = p._income != null ? fmtDollar(p._income) : '—';
+      const wt = fmtPct(p.weight_pct);
+      return `<tr>
+        <td class="td-ticker">${ticker}</td>
+        <td class="td-name">${p.security_name}</td>
+        <td class="td-value">${fmtDollar(p.value)}</td>
+        <td class="td-num">${annualRate}</td>
+        <td class="td-num">${yld}</td>
+        <td class="td-num" style="color:var(--accent-teal)">${inc}</td>
+        <td class="td-weight">${wt}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('div-content').innerHTML = `
+      <div class="hero">
+        <div class="hero-label">Projected Annual Income</div>
+        <div class="hero-value" style="color:var(--accent-teal)">${fmtDollar(totalIncome)}</div>
+        <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total holdings: ${fmtDollarFull(totalValue)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Dividend Details</div>
+        <table>
+          <thead><tr>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Value</th>
+            <th>Annual $/Share</th>
+            <th>Yield</th>
+            <th>Projected Income</th>
+            <th>Weight</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr style="border-top:1px solid var(--border)">
+            <td colspan="5" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(totalIncome)}</td>
+            <td></td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  }
+
+  // ── Earnings renderer ─────────────────────────────────────────
+  function renderEarnings(positions) {
+    // Projected income (reuse same logic as dividends)
+    let totalIncome = 0;
+    for (const p of positions) {
+      if (p.dividend_rate && p.quantity) totalIncome += p.quantity * p.dividend_rate;
+      else if (p.dividend_yield && p.value) totalIncome += p.value * p.dividend_yield / 100;
+    }
+
+    // Weighted-avg trailing P/E (by value, only trailing_pe > 0, Stock/ETF only)
+    let weightedPE = 0, totalWeight = 0;
+    for (const p of positions) {
+      if ((p.type_display === 'Stock' || p.type_display === 'ETF')
+          && p.trailing_pe && p.trailing_pe > 0) {
+        weightedPE += p.trailing_pe * p.value;
+        totalWeight += p.value;
+      }
+    }
+    const avgPE = totalWeight > 0 ? (weightedPE / totalWeight) : null;
+
+    const rows = positions
+      .filter(p => p.value >= 1)
+      .sort((a, b) => b.value - a.value);
+
+    const isCashOrFI = p => p.type_display === 'Cash' || p.type_display === 'Fixed Income';
+
+    const tableRows = rows.map(p => {
+      const ticker = p.ticker || p.security_name.slice(0, 15);
+      if (isCashOrFI(p)) {
+        return `<tr>
+          <td class="td-ticker">${ticker}</td>
+          <td class="td-name">${p.security_name}</td>
+          <td class="td-value">${fmtDollar(p.value)}</td>
+          <td class="td-muted">—</td>
+          <td class="td-muted">—</td>
+          <td class="td-muted">—</td>
+          <td class="td-muted">—</td>
+          <td class="td-muted">—</td>
+        </tr>`;
+      }
+      const sector = p.sector || '—';
+      const tEps  = fmtNum(p.trailing_eps);
+      const tPE   = p.trailing_pe && p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—';
+      const fPE   = p.forward_pe  && p.forward_pe  > 0 ? fmtNum(p.forward_pe)  : '—';
+      const mCap  = fmtMktCap(p.market_cap);
+      return `<tr>
+        <td class="td-ticker">${ticker}</td>
+        <td class="td-name">${p.security_name}</td>
+        <td class="td-value">${fmtDollar(p.value)}</td>
+        <td class="td-muted">${sector}</td>
+        <td class="td-num">${tEps}</td>
+        <td class="td-num">${tPE}</td>
+        <td class="td-num">${fPE}</td>
+        <td class="td-num">${mCap}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('earn-content').innerHTML = `
+      <div class="hero">
+        <div class="hero-label">Weighted Avg Trailing P/E</div>
+        <div class="hero-value" style="color:var(--accent-blue)">${avgPE != null ? fmtNum(avgPE) : '—'}</div>
+        <div class="hero-sub">Weighted by value · Stocks &amp; ETFs only · Excludes negative P/E</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Earnings Details</div>
+        <table>
+          <thead><tr>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Value</th>
+            <th>Sector</th>
+            <th>Trailing EPS</th>
+            <th>Trailing P/E</th>
+            <th>Forward P/E</th>
+            <th>Market Cap</th>
+          </tr></thead>
+          <tbody>${tableRows}</tbody>
+          <tfoot><tr style="border-top:1px solid var(--border)">
+            <td colspan="7" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Projected Annual Income</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(totalIncome)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  }
+
+  // ── Tax renderer ──────────────────────────────────────────────
+  function renderTax(data) {
+    const buckets = data.buckets;
+    const total = data.total_value;
+
+    // Hero grid: show Taxable, Tax-Deferred, Tax-Advantaged (529) prominently
+    const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Advantaged (529)'];
+    const heroCards = heroKeys.map(label => {
+      const b = buckets[label];
+      const val = b ? b.value : 0;
+      const pct = b ? b.weight_pct : 0;
+      return `<div class="card bucket-hero-card">
+        <div class="bucket-label">${label}</div>
+        <div class="bucket-value">${fmtDollar(val)}</div>
+        <div class="bucket-pct">${fmtNum(pct)}% of portfolio</div>
+      </div>`;
+    }).join('');
+
+    // Per-bucket detail cards
+    const bucketCards = Object.entries(buckets).map(([label, b]) => {
+      const accountRows = b.accounts.map(acct => {
+        const barPct = total > 0 ? (acct.value / total * 100) : 0;
+        return `<div class="tax-account-row">
+          <div class="tax-account-header">
+            <div>
+              <span class="tax-account-name">${acct.account_name}</span>
+              <span class="tax-account-inst"> · ${acct.institution_name}</span>
+            </div>
+            <div class="tax-account-val">${fmtDollar(acct.value)}</div>
+          </div>
+          <div class="tax-bar-wrap">
+            <div class="tax-bar" style="width:${Math.min(barPct, 100)}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+
+      return `<div class="card tax-bucket-card">
+        <div class="card-title">${label} &nbsp;·&nbsp; ${fmtDollar(b.value)} (${fmtNum(b.weight_pct)}%)</div>
+        ${accountRows}
+      </div>`;
+    }).join('');
+
+    document.getElementById('tax-content').innerHTML = `
+      <div class="grid-3">${heroCards}</div>
+      <p class="tax-note">No cost basis — showing current market value only</p>
+      ${bucketCards}`;
+  }
+
   // ── Refresh ───────────────────────────────────────────────────
   async function refreshData() {
     const btn = document.getElementById('refresh-btn');
     btn.textContent = 'Refreshing…';
     btn.disabled = true;
+    _marketData = null;
+    _taxData = null;
     try {
       const data = await fetch('/api/refresh').then(r => r.json());
+      _summaryData = data;
       renderDashboard(data);
+      // Re-render current tab if it's not portfolio
+      if (_activeTab === 'dividends' || _activeTab === 'earnings') {
+        loadMarket(_activeTab);
+      } else if (_activeTab === 'tax') {
+        loadTax();
+      }
     } finally {
       btn.textContent = 'Refresh Data';
       btn.disabled = false;
@@ -536,6 +976,7 @@
   fetch('/api/summary')
     .then(r => r.json())
     .then(data => {
+      _summaryData = data;
       renderDashboard(data);
       document.getElementById('loading').classList.add('hidden');
     })

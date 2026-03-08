@@ -17,6 +17,8 @@ from loader import (
     calculate_metrics,
     check_concentration,
     calculate_institutions,
+    enrich_with_market_data,
+    calculate_tax_buckets,
 )
 
 # Fail immediately if .gitignore is missing required security patterns
@@ -36,6 +38,10 @@ def _build_cache() -> None:
         "concentration": check_concentration(df),
         "institutions": calculate_institutions(df_raw),
     }
+    _cache["df_raw"] = df_raw
+    # Clear derived lazy caches so next request recomputes
+    _cache.pop("market", None)
+    _cache.pop("tax", None)
 
 
 _build_cache()
@@ -49,6 +55,20 @@ def root():
 @app.get("/api/summary")
 def summary():
     return _cache["summary"]
+
+
+@app.get("/api/market")
+def market():
+    if "market" not in _cache:
+        _cache["market"] = enrich_with_market_data(_cache["summary"]["positions"])
+    return _cache["market"]
+
+
+@app.get("/api/tax")
+def tax():
+    if "tax" not in _cache:
+        _cache["tax"] = calculate_tax_buckets(_cache["df_raw"])
+    return _cache["tax"]
 
 
 @app.get("/api/refresh")

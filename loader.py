@@ -195,6 +195,7 @@ def calculate_metrics(df) -> dict:
             "value": round(float(row["value"]), 2),
             "weight_pct": round(float(weight), 4),
             "type_display": row["type_display"],
+            "quantity": round(float(row["quantity"]), 6),
         })
 
     # Sort by value descending
@@ -263,7 +264,162 @@ def calculate_institutions(df_raw) -> list:
 
 
 # ---------------------------------------------------------------------------
-# 7. CLI entry point
+# 8. Market data enrichment (yfinance)
+# ---------------------------------------------------------------------------
+
+YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
+_market_cache: dict = {}  # keyed by ticker string
+
+
+def enrich_with_market_data(positions: list) -> list:
+    """
+    Enrich each position dict with market data from yfinance.
+
+    Adds: dividend_yield, dividend_rate, ex_dividend_date, payout_ratio,
+          trailing_eps, forward_eps, trailing_pe, forward_pe,
+          market_cap, sector, industry, earnings_timestamp.
+    Fields are None if ticker is skipped or lookup fails.
+    Only ticker symbols leave the machine.
+    """
+    import yfinance as yf
+
+    _FIELDS = [
+        "dividend_yield", "dividend_rate", "ex_dividend_date", "payout_ratio",
+        "trailing_eps", "forward_eps", "trailing_pe", "forward_pe",
+        "market_cap", "sector", "industry", "earnings_timestamp",
+    ]
+    _YF_MAP = {
+        "dividend_yield":    "dividendYield",
+        "dividend_rate":     "dividendRate",
+        "ex_dividend_date":  "exDividendDate",
+        "payout_ratio":      "payoutRatio",
+        "trailing_eps":      "trailingEps",
+        "forward_eps":       "forwardEps",
+        "trailing_pe":       "trailingPE",
+        "forward_pe":        "forwardPE",
+        "market_cap":        "marketCap",
+        "sector":            "sector",
+        "industry":          "industry",
+        "earnings_timestamp": "earningsTimestamp",
+    }
+
+    # Collect unique tickers to fetch
+    unique_tickers = {
+        p["ticker"] for p in positions
+        if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS
+    }
+
+    for t in unique_tickers:
+        if t in _market_cache:
+            continue
+        try:
+            info = yf.Ticker(t).info
+            _market_cache[t] = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+        except Exception:
+            _market_cache[t] = {k: None for k in _FIELDS}
+
+    enriched = []
+    for pos in positions:
+        p = dict(pos)
+        ticker = p.get("ticker", "")
+        if ticker and ticker not in YFINANCE_SKIP_TICKERS:
+            market = _market_cache.get(ticker, {k: None for k in _FIELDS})
+        else:
+            market = {k: None for k in _FIELDS}
+        p.update(market)
+        enriched.append(p)
+
+    return enriched
+
+
+# ---------------------------------------------------------------------------
+# 9. Tax bucket calculation
+# ---------------------------------------------------------------------------
+
+_TAX_RULES = [
+    ("Roth",                "Tax-Exempt (Roth)"),
+    ("529",                 "Tax-Advantaged (529)"),
+    ("Rollover IRA",        "Tax-Deferred"),
+    ("Traditional IRA",     "Tax-Deferred"),
+    ("401",                 "Tax-Deferred"),
+    ("Equity Awards",       "Taxable"),
+    ("Individual Brokerage","Taxable"),
+    ("Individual - TOD",    "Taxable"),
+]
+
+
+def _classify_account(account_name: str) -> str:
+    for pattern, bucket in _TAX_RULES:
+        if pattern in account_name:
+            return bucket
+    return "Other / Unclassified"
+
+
+def calculate_tax_buckets(df_raw) -> dict:
+    """
+    Group accounts into tax buckets based on account_name patterns.
+
+    Returns a dict with total_value and per-bucket breakdown including
+    accounts and their holdings sorted by value desc.
+    """
+    import pandas as pd
+
+    df = df_raw.copy()
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
+
+    total_value = float(df["value"].sum())
+    buckets: dict = {}
+
+    for account_name, acct_df in df.groupby("account_name"):
+        bucket_label = _classify_account(str(account_name))
+        acct_value = float(acct_df["value"].sum())
+        institution = str(acct_df["institution_name"].iloc[0]) if len(acct_df) else ""
+
+        holdings = sorted(
+            [
+                {
+                    "ticker": str(row["ticker"]),
+                    "security_name": str(row["security_name"]),
+                    "value": round(float(row["value"]), 2),
+                }
+                for _, row in acct_df.iterrows()
+                if float(row["value"]) >= 0.01
+            ],
+            key=lambda h: h["value"],
+            reverse=True,
+        )
+
+        account_entry = {
+            "account_name": str(account_name),
+            "institution_name": institution,
+            "value": round(acct_value, 2),
+            "holdings": holdings,
+        }
+
+        if bucket_label not in buckets:
+            buckets[bucket_label] = {"value": 0.0, "accounts": []}
+        buckets[bucket_label]["value"] += acct_value
+        buckets[bucket_label]["accounts"].append(account_entry)
+
+    # Sort accounts within each bucket by value desc
+    for label, bucket in buckets.items():
+        bucket["value"] = round(bucket["value"], 2)
+        bucket["weight_pct"] = round(bucket["value"] / total_value * 100, 4) if total_value else 0.0
+        bucket["accounts"].sort(key=lambda a: a["value"], reverse=True)
+
+    # Sort buckets by value desc
+    sorted_buckets = dict(
+        sorted(buckets.items(), key=lambda x: x[1]["value"], reverse=True)
+    )
+
+    return {
+        "total_value": round(total_value, 2),
+        "buckets": sorted_buckets,
+    }
+
+
+# ---------------------------------------------------------------------------
+# 10. CLI entry point
 # ---------------------------------------------------------------------------
 
 def main():
