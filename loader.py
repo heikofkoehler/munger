@@ -135,10 +135,23 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
 # 3. Normalization & Deduplication
 # ---------------------------------------------------------------------------
 
-def normalize_ticker(ticker: str) -> str:
+# Map different stock classes or common aliases to a single "Master Ticker"
+# for concentration risk aggregation.
+TICKER_ALIASES = {
+    "GOOG":  "GOOGL", # Alphabet Inc.
+    "BRK-A": "BRK-B", # Berkshire Hathaway
+    "BRKA":  "BRK-B",
+    "BRKB":  "BRK-B",
+}
+
+
+def normalize_ticker(ticker: str, aggregate_classes: bool = False) -> str:
     """
     Normalize ticker symbols to a standard format.
-    Converts . to - (e.g., BRK.B -> BRK-B) and handles common variations.
+    Converts . to - (e.g., BRK.B -> BRK-B).
+    
+    If aggregate_classes is True, it will also map different share classes 
+    to a single master ticker (e.g., GOOG -> GOOGL).
     """
     if not ticker or not isinstance(ticker, str):
         return ""
@@ -149,6 +162,15 @@ def normalize_ticker(ticker: str) -> str:
     if "-" in t:
         parts = [p.strip() for p in t.split("-")]
         t = "-".join(parts)
+    
+    # Strip common class suffixes if they don't have a hyphen yet
+    # e.g. "BRKB" -> "BRK-B" logic handled above partially, but let's be explicit
+    if t == "BRKB": t = "BRK-B"
+    if t == "BRKA": t = "BRK-B" if aggregate_classes else "BRK-A"
+
+    if aggregate_classes:
+        return TICKER_ALIASES.get(t, t)
+    
     return t
 
 
@@ -165,9 +187,11 @@ def deduplicate(df):
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
     
-    # Normalize tickers before grouping
+    # Normalize tickers for consistent display, but DON'T aggregate 
+    # different share classes yet to avoid corrupting quantity/price 
+    # if they have different security_ids.
     if "ticker" in df.columns:
-        df["ticker"] = df["ticker"].apply(normalize_ticker)
+        df["ticker"] = df["ticker"].apply(lambda t: normalize_ticker(t, aggregate_classes=False))
 
     # Metadata to preserve from first occurrence
     meta = df.groupby("security_id")[["ticker", "security_name", "type_display"]].first()
@@ -361,7 +385,8 @@ def calculate_risk_metrics(df) -> dict:
     ticker_names = {}       # ticker -> name (best guess)
 
     for _, row in df.iterrows():
-        ticker = normalize_ticker(row["ticker"] or f"UNKNOWN_{row['security_id']}")
+        # For concentration risk, we AGGREGATE share classes (e.g. GOOG -> GOOGL)
+        ticker = normalize_ticker(row["ticker"] or f"UNKNOWN_{row['security_id']}", aggregate_classes=True)
         exposure_direct[ticker] = exposure_direct.get(ticker, 0.0) + row["value"]
         ticker_names[ticker] = row["security_name"]
 
@@ -369,7 +394,8 @@ def calculate_risk_metrics(df) -> dict:
     for fund_ticker, data in fund_holdings_map.items():
         fund_value = data["value"]
         for h in data["holdings"]:
-            h_ticker = normalize_ticker(h["ticker"])
+            # Aggregate indirect holdings too (e.g. VOO might hold both GOOG and GOOGL)
+            h_ticker = normalize_ticker(h["ticker"], aggregate_classes=True)
             h_weight = h["weight"]
             indirect_value = fund_value * h_weight
             exposure_indirect[h_ticker] = exposure_indirect.get(h_ticker, 0.0) + indirect_value
