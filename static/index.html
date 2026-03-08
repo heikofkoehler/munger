@@ -4,8 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Munger — Portfolio</title>
-  <!-- Plotly.js pinned 2.32.0 via jsDelivr — no tracking, no cookies -->
-  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.32.0/plotly.min.js"></script>
   <style>
     /* ── Variables ──────────────────────────────────────────── */
     :root {
@@ -183,9 +181,6 @@
     }
     .grid-3 .card { margin-bottom: 0; }
 
-    /* ── Sunburst ───────────────────────────────────────────── */
-    #sunburst-chart { height: 380px; }
-
     /* ── Concentration flags ────────────────────────────────── */
     .flags-empty {
       color: var(--text-muted);
@@ -226,26 +221,28 @@
       margin-top: 0.25rem;
     }
 
-    /* ── Allocation legend (below sunburst) ─────────────────── */
-    .alloc-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.75rem 1.25rem;
-      margin-top: 1rem;
+    /* ── Allocation bars ─────────────────────────────────────── */
+    .alloc-row {
+      display: grid;
+      grid-template-columns: 120px 1fr 90px 52px;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
     }
-    .legend-item {
+    .alloc-row:last-child { border-bottom: none; }
+    .alloc-name {
       display: flex;
       align-items: center;
-      gap: 0.4rem;
-      font-size: 12px;
-      color: var(--text-secondary);
+      gap: 0.5rem;
+      font-size: 13px;
+      color: var(--text-primary);
     }
-    .legend-dot {
+    .alloc-dot {
       width: 8px; height: 8px;
       border-radius: 50%;
       flex-shrink: 0;
     }
-    .legend-pct { color: var(--text-primary); font-weight: 600; }
 
     /* ── Institutions ───────────────────────────────────────── */
     .inst-row {
@@ -458,8 +455,7 @@
     <div class="grid-2">
       <div class="card">
         <div class="card-title">Allocation</div>
-        <div id="sunburst-chart"></div>
-        <div id="alloc-legend" class="alloc-legend"></div>
+        <div id="alloc-panel"></div>
       </div>
       <div class="card">
         <div class="card-title">Concentration Risk</div>
@@ -631,59 +627,25 @@
     document.getElementById('price-date').textContent = 'as of ' + date;
   }
 
-  function renderSunburst(data) {
-    const labels  = ['Portfolio'];
-    const parents = [''];
-    const values  = [data.total_value];
-    const colors  = ['rgba(0,0,0,0)'];
-    const texts   = [''];
-
-    for (const [ac, pct] of Object.entries(data.allocation)) {
-      labels.push(ac);
-      parents.push('Portfolio');
-      values.push(pct / 100 * data.total_value);
-      colors.push(colorFor(ac));
-      texts.push(ac + '<br>' + fmtPct(pct));
-    }
-
-    for (const pos of data.positions) {
-      if (pos.value < 1) continue;
-      const label = pos.ticker || pos.security_name.slice(0, 12);
-      labels.push(label);
-      parents.push(pos.type_display);
-      values.push(pos.value);
-      colors.push(colorFor(pos.type_display) + 'bb');
-      texts.push('');
-    }
-
-    Plotly.react('sunburst-chart', [{
-      type: 'sunburst',
-      labels, parents, values, text: texts,
-      marker: { colors, line: { width: 1.5, color: '#0f1117' } },
-      branchvalues: 'total',
-      hovertemplate: '<b>%{label}</b><br>%{value:$,.0f}<br>%{percentRoot:.1%} of portfolio<extra></extra>',
-      textinfo: 'label',
-      insidetextorientation: 'radial',
-      textfont: { family: '-apple-system, sans-serif', size: 11, color: '#f0f2f5' },
-      leaf: { opacity: 0.85 },
-    }], {
-      paper_bgcolor: '#1a1d27',
-      plot_bgcolor:  '#1a1d27',
-      margin: { t: 0, b: 0, l: 0, r: 0 },
-      showlegend: false,
-    }, {
-      responsive: true,
-      displayModeBar: false,
-    });
-
-    const legend = document.getElementById('alloc-legend');
-    legend.innerHTML = Object.entries(data.allocation)
+  function renderAllocation(data) {
+    const panel = document.getElementById('alloc-panel');
+    panel.innerHTML = Object.entries(data.allocation)
       .sort((a, b) => b[1] - a[1])
-      .map(([ac, pct]) => `
-        <div class="legend-item">
-          <div class="legend-dot" style="background:${colorFor(ac)}"></div>
-          ${ac} <span class="legend-pct">${fmtPct(pct)}</span>
-        </div>`).join('');
+      .map(([ac, pct]) => {
+        const color = colorFor(ac);
+        const value = pct / 100 * data.total_value;
+        return `<div class="alloc-row">
+          <div class="alloc-name">
+            <div class="alloc-dot" style="background:${color}"></div>
+            ${ac}
+          </div>
+          <div class="inst-bar-wrap">
+            <div class="inst-bar" style="width:${pct}%;background:${color}"></div>
+          </div>
+          <div class="inst-value">${fmtDollar(value)}</div>
+          <div class="inst-pct">${fmtPct(pct)}</div>
+        </div>`;
+      }).join('');
   }
 
   function renderFlags(data) {
@@ -753,7 +715,7 @@
 
   function renderDashboard(data) {
     renderHero(data);
-    renderSunburst(data);
+    renderAllocation(data);
     renderFlags(data);
     renderInstitutions(data);
     renderPositions(data);
