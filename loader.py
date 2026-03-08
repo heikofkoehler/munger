@@ -381,7 +381,7 @@ def calculate_tax_buckets(df_raw) -> dict:
                     "security_name": str(row["security_name"]),
                     "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
                     "value": round(float(row["value"]), 2),
-                    "cost_basis": round(float(pd.to_numeric(row["cost_basis"], errors="coerce") or 0), 2) if has_cost_basis else None,
+                    "cost_basis": round(float(cb), 2) if has_cost_basis and not pd.isna(cb := pd.to_numeric(row["cost_basis"], errors="coerce")) else None,
                     "type_display": str(row["type_display"]),
                 }
                 for _, row in acct_df.iterrows()
