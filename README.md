@@ -8,7 +8,7 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from G
 - **CSV fallback** — drop in a local file for dev/offline use
 - **Position deduplication** — merges the same security held across multiple accounts by `security_id`
 - **Asset class normalization** — maps cash and fixed income tickers to canonical types
-- **Concentration risk flags** — configurable per-ticker thresholds
+- **Concentration risk flags** — any position exceeding a configurable threshold is flagged automatically
 - **Market data enrichment** — dividend yield/rate, EPS, P/E, sector, market cap via yfinance (ticker symbols only leave the machine)
 - **Tax bucket classification** — accounts classified as Taxable / Tax-Deferred / Tax-Exempt by name pattern
 - **Local-first** — all financial data stays on your machine after fetch
@@ -33,14 +33,16 @@ Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show 
 ### Tax tab
 Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars.
 
-Ticker symbols link to Yahoo Finance (Stock and ETF only).
+Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env
-# edit .env with your SHEET_ID or CSV_PATH
+# create .env with your data source
+echo "CSV_PATH=portfolio_holdings.csv" > .env
+# or for Google Sheets:
+echo "SHEET_ID=your_sheet_id_here" > .env
 ```
 
 For Google Sheets, download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window opens on first run to authorize; the token is cached locally in `token.json`.
