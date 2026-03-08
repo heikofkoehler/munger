@@ -696,7 +696,9 @@
 
   // ── Portfolio renderers ───────────────────────────────────────
   function renderHero(data) {
-    document.getElementById('total-value').textContent = fmtDollarFull(data.total_value);
+    if (!data) return;
+    const val = data.total_value != null ? fmtDollarFull(data.total_value) : '—';
+    document.getElementById('total-value').textContent = val;
     const date = data._price_date
       ? new Date(data._price_date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
       : 'Latest data';
@@ -704,12 +706,13 @@
   }
 
   function renderAllocation(data) {
+    if (!data || !data.allocation) return;
     const panel = document.getElementById('alloc-panel');
     panel.innerHTML = Object.entries(data.allocation)
       .sort((a, b) => b[1] - a[1])
       .map(([ac, pct]) => {
         const color = colorFor(ac);
-        const value = pct / 100 * data.total_value;
+        const value = pct / 100 * (data.total_value || 0);
         return `<div class="alloc-row">
           <div class="alloc-name">
             <div class="alloc-dot" style="background:${color}"></div>
@@ -725,6 +728,7 @@
   }
 
   function renderFlags(data) {
+    if (!data || !data.concentration) return;
     const panel = document.getElementById('flags-panel');
     const flagged = data.concentration.filter(c => c.flagged);
 
@@ -749,6 +753,7 @@
   }
 
   function renderInstitutions(data) {
+    if (!data || !data.institutions) return;
     const panel = document.getElementById('institutions-panel');
     panel.innerHTML = data.institutions.map(inst => `
       <div class="inst-row">
@@ -762,8 +767,9 @@
   }
 
   function renderPositions(data) {
+    if (!data || !data.positions) return;
     const flaggedTickers = new Set(
-      data.concentration.filter(c => c.flagged).map(c => c.ticker)
+      (data.concentration || []).filter(c => c.flagged).map(c => c.ticker)
     );
 
     const tbody = document.getElementById('positions-body');
@@ -841,13 +847,17 @@
   }
 
   function renderDashboard(data) {
+    if (!data) return;
     renderHero(data);
     renderAllocation(data);
     renderFlags(data);
     renderInstitutions(data);
     renderPositions(data);
     if (data.risk) renderRisk(data);
-    else document.getElementById('risk-content').innerHTML = `<div class="spinner-wrap" style="color:var(--text-muted)">Risk analysis not yet calculated. Visit the <strong>Risk</strong> tab to start.</div>`;
+    else {
+      const riskEl = document.getElementById('risk-content');
+      if (riskEl) riskEl.innerHTML = `<div class="spinner-wrap" style="color:var(--text-muted)">Risk analysis not yet calculated. Visit the <strong>Risk</strong> tab to start.</div>`;
+    }
     document.querySelectorAll('#panel-portfolio table').forEach(makeSortable);
   }
 
