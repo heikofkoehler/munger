@@ -216,35 +216,29 @@ def calculate_metrics(df) -> dict:
 # 6. Concentration risk
 # ---------------------------------------------------------------------------
 
-DEFAULT_THRESHOLDS = {
-    "GOOG": float(os.environ.get("CONC_THRESHOLD_GOOG", 10.0)),
-    "VOO": float(os.environ.get("CONC_THRESHOLD_VOO", 20.0)),
-}
+CONC_THRESHOLD = float(os.environ.get("CONC_THRESHOLD", 10.0))
 
 
-def check_concentration(df, thresholds: dict = None) -> list:
+def check_concentration(df) -> list:
     """
-    Flag tickers that exceed concentration thresholds.
+    Flag any position whose portfolio weight exceeds CONC_THRESHOLD.
 
-    Returns list of dicts: {"ticker", "weight_pct", "threshold", "flagged"}.
-    Only watched tickers are included.
+    Returns list of dicts: {"ticker", "security_name", "weight_pct", "threshold", "flagged"},
+    sorted by weight descending. All positions above the threshold are included.
     """
-    if thresholds is None:
-        thresholds = DEFAULT_THRESHOLDS
-
     total = df["value"].sum()
     results = []
-    for ticker, threshold in thresholds.items():
-        mask = df["ticker"] == ticker
-        position_value = df.loc[mask, "value"].sum()
-        weight = (position_value / total * 100) if total else 0.0
-        results.append({
-            "ticker": ticker,
-            "weight_pct": round(float(weight), 4),
-            "threshold": threshold,
-            "flagged": bool(weight > threshold),
-        })
-    return results
+    for _, row in df.iterrows():
+        weight = (row["value"] / total * 100) if total else 0.0
+        if weight > CONC_THRESHOLD:
+            results.append({
+                "ticker": row["ticker"],
+                "security_name": row["security_name"],
+                "weight_pct": round(float(weight), 4),
+                "threshold": CONC_THRESHOLD,
+                "flagged": True,
+            })
+    return sorted(results, key=lambda x: x["weight_pct"], reverse=True)
 
 
 # ---------------------------------------------------------------------------
@@ -460,14 +454,12 @@ def main():
     print()
 
     # Concentration flags
-    flags = [c for c in concentration if c["flagged"]]
-    if flags:
-        print("CONCENTRATION RISK FLAGS:")
-        for f in flags:
-            print(f"  {f['ticker']}: {f['weight_pct']:.2f}% (threshold: {f['threshold']}%)")
+    if concentration:
+        print(f"CONCENTRATION RISK FLAGS (>{CONC_THRESHOLD}%):")
+        for f in concentration:
+            print(f"  {f['ticker']}: {f['weight_pct']:.2f}%")
     else:
-        watched = ", ".join(c["ticker"] for c in concentration)
-        print(f"No concentration flags triggered (watched: {watched}).")
+        print(f"No concentration flags triggered (threshold: {CONC_THRESHOLD}%).")
 
 
 if __name__ == "__main__":

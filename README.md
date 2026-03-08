@@ -58,8 +58,7 @@ The sheet must have these columns:
 | `SHEET_ID` | — | Google Sheet ID (from URL) |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | OAuth client secret file |
 | `CSV_PATH` | — | Local CSV path (overrides Sheets) |
-| `CONC_THRESHOLD_GOOG` | `10.0` | GOOG concentration threshold % |
-| `CONC_THRESHOLD_VOO` | `20.0` | VOO concentration threshold % |
+| `CONC_THRESHOLD` | `10.0` | Flag any position exceeding this % of portfolio |
 
 ## Security
 
