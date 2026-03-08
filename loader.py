@@ -553,6 +553,7 @@ def calculate_risk_metrics(df) -> dict:
         "true_exposure": true_exposure,
         "wer": round(float(wer), 6),
         "total_annual_cost": round(float(total_annual_cost), 2),
+        "threshold": CONC_THRESHOLD,
     }
 
 

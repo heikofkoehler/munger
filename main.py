@@ -35,15 +35,23 @@ _cache: dict = {}
 def _build_cache() -> None:
     df_raw = load()
     df = normalize_asset_class(deduplicate(df_raw))
+    risk = calculate_risk_metrics(df)
+    
     _cache["summary"] = {
         **calculate_metrics(df),
         "institutions": calculate_institutions(df_raw),
+        "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
+        "risk_threshold": risk.get("threshold", 10.0),
     }
     _cache["df_clean"] = df
     _cache["df_raw"] = df_raw
-    # Clear derived lazy caches
+    _cache["risk"] = risk
+    
+    # Persistent snapshot for historical trend analysis
+    save_risk_snapshot(risk)
+    
+    # Clear other lazy caches
     _cache.pop("market", None)
-    _cache.pop("risk", None)
     _cache.pop("tax", None)
     _cache.pop("efficiency", None)
 

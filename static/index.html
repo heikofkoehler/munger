@@ -779,9 +779,9 @@
           <span class="flag-of">of portfolio</span>
         </div>
         <div class="flag-threshold">
-          Threshold ${fmtPct(f.threshold)}
+          Threshold ${fmtPct(data.risk_threshold)}
           &nbsp;·&nbsp;
-          <span class="flag-over">+${fmtPct(f.weight_pct - f.threshold)} over limit</span>
+          <span class="flag-over">+${fmtPct(f.weight_pct - data.risk_threshold)} over limit</span>
         </div>
       </div>`).join('');
   }
