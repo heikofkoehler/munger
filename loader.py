@@ -152,7 +152,11 @@ def deduplicate(df):
     meta = df.groupby("security_id")[["ticker", "security_name", "type_display"]].first()
 
     # Summed numeric columns
-    numeric = df.groupby("security_id")[["quantity", "value"]].sum()
+    numeric_cols = ["quantity", "value"]
+    if "cost_basis" in df.columns:
+        df["cost_basis"] = pd.to_numeric(df["cost_basis"], errors="coerce").fillna(0)
+        numeric_cols.append("cost_basis")
+    numeric = df.groupby("security_id")[numeric_cols].sum()
 
     result = meta.join(numeric).reset_index()
     return result
@@ -369,6 +373,7 @@ def calculate_tax_buckets(df_raw) -> dict:
         acct_value = float(acct_df["value"].sum())
         institution = str(acct_df["institution_name"].iloc[0]) if len(acct_df) else ""
 
+        has_cost_basis = "cost_basis" in acct_df.columns
         holdings = sorted(
             [
                 {
@@ -376,6 +381,7 @@ def calculate_tax_buckets(df_raw) -> dict:
                     "security_name": str(row["security_name"]),
                     "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
                     "value": round(float(row["value"]), 2),
+                    "cost_basis": round(float(pd.to_numeric(row["cost_basis"], errors="coerce") or 0), 2) if has_cost_basis else None,
                     "type_display": str(row["type_display"]),
                 }
                 for _, row in acct_df.iterrows()

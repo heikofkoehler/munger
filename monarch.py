@@ -176,6 +176,7 @@ def to_dataframe(data: dict):
                 "type_display":     h["typeDisplay"],
                 "quantity":         h["quantity"],
                 "value":            h["value"],
+                "cost_basis":       h.get("costBasis"),
                 "security_id":      security_id,
                 "security_name":    security_name,
                 "price_updated":    h.get("closingPriceUpdatedAt") or "",
