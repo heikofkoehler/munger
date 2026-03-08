@@ -223,8 +223,8 @@ def deduplicate(df):
 # 4. Asset class normalization
 # ---------------------------------------------------------------------------
 
-CASH_TICKERS = {"FCASH", "CUR:USD"}
-FIXED_INCOME_TICKERS = {"VCSH", "VGSH"}
+CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
+FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
 
 
 def normalize_asset_class(df):
@@ -372,43 +372,59 @@ def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> 
 
     # 1. Individual Asset Analysis
     total_annual_cost = 0.0
+    optimized_annual_cost = 0.0
     high_cost_assets = []
     
     for _, row in df.iterrows():
-        is_fund = row["type_display"] in ["ETF", "Mutual Fund"]
-        if is_fund and row["ticker"]:
-            details = get_fund_details(row["ticker"])
-            exp_ratio = details.get("expense_ratio") or 0.0
+        val = float(row["value"])
+        ticker = row["ticker"]
+        exp_ratio = 0.0
+        
+        # Check ANY ticker for expense ratio (some funds are misclassified as Stocks)
+        if ticker:
+            details = get_fund_details(ticker)
+            exp_ratio = float(details.get("expense_ratio") or 0.0)
             
-            annual_cost = row["value"] * exp_ratio
-            total_annual_cost += annual_cost
-            
-            # Benchmarking
-            status = "Green"
-            if exp_ratio > 0.005: status = "Red"
-            elif exp_ratio > 0.002: status = "Amber"
-            
-            potential_savings = row["value"] * (exp_ratio - benchmark_fee) if exp_ratio > benchmark_fee else 0.0
-            
-            high_cost_assets.append({
-                "ticker": row["ticker"],
-                "name": row["security_name"],
-                "value": round(float(row["value"]), 2),
-                "exp_ratio": round(float(exp_ratio), 4),
-                "annual_cost": round(float(annual_cost), 2),
-                "potential_savings": round(float(potential_savings), 2),
-                "status": status
-            })
+            if exp_ratio > 0:
+                annual_cost = val * exp_ratio
+                total_annual_cost += annual_cost
+                
+                # Optimized cost: cap at benchmark_fee (e.g. 0.05%)
+                optimized_annual_cost += val * min(exp_ratio, benchmark_fee)
+                
+                # Benchmarking
+                status = "Green"
+                if exp_ratio > 0.005: status = "Red"
+                elif exp_ratio > 0.002: status = "Amber"
+                
+                potential_savings = val * (exp_ratio - benchmark_fee) if exp_ratio > benchmark_fee else 0.0
+                
+                high_cost_assets.append({
+                    "ticker": ticker,
+                    "name": row["security_name"],
+                    "value": round(val, 2),
+                    "exp_ratio": round(exp_ratio, 4),
+                    "annual_cost": round(annual_cost, 2),
+                    "potential_savings": round(float(potential_savings), 2),
+                    "status": status
+                })
+            else:
+                # No fee found (Stock or non-fund cash)
+                optimized_annual_cost += 0.0
+        else:
+            # No ticker
+            optimized_annual_cost += 0.0
 
     wer = total_annual_cost / total_value
+    optimized_wer = optimized_annual_cost / total_value
     
     # 2. Wealth Gap Projections (10, 20, 30 years)
     projections = []
     for years in [10, 20, 30]:
         # Scenario A: Current (r - f)
         current_val = total_value * ((1 + (growth_rate - wer)) ** years)
-        # Scenario B: Optimized (r - benchmark)
-        optimized_val = total_value * ((1 + (growth_rate - benchmark_fee)) ** years)
+        # Scenario B: Optimized (r - f_opt)
+        optimized_val = total_value * ((1 + (growth_rate - optimized_wer)) ** years)
         wealth_gap = optimized_val - current_val
         
         projections.append({
