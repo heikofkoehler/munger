@@ -30,8 +30,8 @@ Projected annual income hero, split by tax bucket. Per-bucket tables show Ticker
 ### Earnings tab
 Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Sector · Trailing EPS · Trailing P/E · Forward P/E · Market Cap. Sortable columns.
 
-### Tax tab
-Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars.
+### Accounts tab
+Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars. Click any account name to see a full holdings detail page (Ticker · Name · Value · Type) with a back button to return to the overview.
 
 Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
 
