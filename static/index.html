@@ -321,6 +321,11 @@
       font-size: 13px;
       white-space: nowrap;
     }
+    .ticker-link {
+      color: inherit;
+      text-decoration: none;
+    }
+    .ticker-link:hover { color: var(--accent-purple); }
     .td-name { color: var(--text-secondary); }
     .td-value { font-variant-numeric: tabular-nums; }
     .td-weight { color: var(--text-secondary); }
@@ -700,7 +705,7 @@
     tbody.innerHTML = data.positions
       .filter(p => p.value >= 1)
       .map(p => {
-        const label = p.ticker || p.security_name.slice(0, 15);
+        const label = tickerLink(p.ticker || p.security_name.slice(0, 15));
         const flag  = flaggedTickers.has(p.ticker)
           ? '<span class="flag-icon" title="Concentration flag">&#9888;</span>' : '';
         const color = colorFor(p.type_display);
@@ -717,6 +722,14 @@
             </td>
           </tr>`;
       }).join('');
+  }
+
+  // ── Ticker link ───────────────────────────────────────────────
+  const SKIP_LINK = new Set(['FCASH', 'CUR:USD', '']);
+  function tickerLink(ticker) {
+    if (!ticker || SKIP_LINK.has(ticker)) return ticker || '—';
+    const url = `https://www.google.com/finance/quote/${encodeURIComponent(ticker)}`;
+    return `<a class="ticker-link" href="${url}" target="_blank" rel="noopener noreferrer">${ticker}</a>`;
   }
 
   // ── Sort helper ───────────────────────────────────────────────
@@ -811,7 +824,7 @@
       const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollar(bucketIncome)}/yr</span>`;
 
       const rows = positions.map(p => {
-        const ticker = p.ticker || (p.security_name || '').slice(0, 15) || '—';
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
         const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
         const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
         const inc = p._income != null ? fmtDollar(p._income) : '—';
@@ -906,7 +919,7 @@
         : '';
 
       const rows = positions.map(p => {
-        const ticker = p.ticker || (p.security_name || '').slice(0, 15) || '—';
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
         const type = p.type_display || 'Cash';
         if (type === 'Cash' || type === 'Fixed Income') {
           return `<tr>
