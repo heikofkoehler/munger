@@ -294,9 +294,15 @@
       color: var(--text-muted);
       padding: 0 0.75rem 0.75rem;
       border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
     }
     thead th:not(:first-child) { text-align: right; }
     thead th:first-child { padding-left: 0; }
+    thead th:hover { color: var(--text-secondary); }
+    thead th[data-sort="asc"]::after  { content: " ▲"; color: var(--accent-purple); }
+    thead th[data-sort="desc"]::after { content: " ▼"; color: var(--accent-purple); }
     tbody tr {
       border-bottom: 1px solid var(--border);
       transition: background 0.1s;
@@ -713,12 +719,55 @@
       }).join('');
   }
 
+  // ── Sort helper ───────────────────────────────────────────────
+  function parseVal(text) {
+    const t = (text || '').trim();
+    if (t === '—' || t === '') return NaN;
+    const s = t.replace(/[$,]/g, '');
+    if (s.endsWith('T')) return parseFloat(s) * 1e12;
+    if (s.endsWith('B')) return parseFloat(s) * 1e9;
+    if (s.endsWith('M')) return parseFloat(s) * 1e6;
+    if (s.endsWith('K')) return parseFloat(s) * 1e3;
+    if (s.endsWith('%')) return parseFloat(s);
+    return parseFloat(s);
+  }
+
+  function makeSortable(table) {
+    const ths = table.querySelectorAll('thead th');
+    let sortCol = -1, sortAsc = true;
+    ths.forEach((th, i) => {
+      th.addEventListener('click', () => {
+        sortAsc = (sortCol === i) ? !sortAsc : true;
+        sortCol = i;
+        ths.forEach((h, j) => {
+          delete h.dataset.sort;
+          if (j === i) h.dataset.sort = sortAsc ? 'asc' : 'desc';
+        });
+        const tbody = table.querySelector('tbody');
+        Array.from(tbody.querySelectorAll('tr'))
+          .sort((a, b) => {
+            const aText = a.cells[i]?.textContent.trim() || '';
+            const bText = b.cells[i]?.textContent.trim() || '';
+            const aN = parseVal(aText), bN = parseVal(bText);
+            let cmp;
+            if (isNaN(aN) && isNaN(bN)) cmp = aText.localeCompare(bText);
+            else if (isNaN(aN)) return 1;
+            else if (isNaN(bN)) return -1;
+            else cmp = aN - bN;
+            return sortAsc ? cmp : -cmp;
+          })
+          .forEach(r => tbody.appendChild(r));
+      });
+    });
+  }
+
   function renderDashboard(data) {
     renderHero(data);
     renderAllocation(data);
     renderFlags(data);
     renderInstitutions(data);
     renderPositions(data);
+    document.querySelectorAll('#panel-portfolio table').forEach(makeSortable);
   }
 
   // ── Dividends renderer ────────────────────────────────────────
@@ -802,6 +851,7 @@
         <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total holdings: ${fmtDollarFull(totalValue)}</div>
       </div>
       ${sections}`;
+    document.querySelectorAll('#div-content table').forEach(makeSortable);
   }
 
   // ── Earnings renderer ─────────────────────────────────────────
@@ -902,6 +952,7 @@
         <div class="hero-sub">Weighted by value · Stocks &amp; ETFs only · Excludes negative P/E &nbsp;·&nbsp; Projected income: ${fmtDollar(totalIncome)}</div>
       </div>
       ${sections}`;
+    document.querySelectorAll('#earn-content table').forEach(makeSortable);
   }
 
   // ── Tax renderer ──────────────────────────────────────────────
