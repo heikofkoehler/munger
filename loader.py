@@ -286,7 +286,7 @@ def enrich_with_market_data(positions: list) -> list:
     _FIELDS = [
         "dividend_yield", "dividend_rate", "ex_dividend_date", "payout_ratio",
         "trailing_eps", "forward_eps", "trailing_pe", "forward_pe",
-        "market_cap", "sector", "industry", "earnings_timestamp", "exchange",
+        "market_cap", "sector", "industry", "earnings_timestamp",
     ]
     _YF_MAP = {
         "dividend_yield":    "dividendYield",
@@ -301,7 +301,6 @@ def enrich_with_market_data(positions: list) -> list:
         "sector":            "sector",
         "industry":          "industry",
         "earnings_timestamp": "earningsTimestamp",
-        "exchange":          "exchange",
     }
 
     # Collect unique tickers to fetch

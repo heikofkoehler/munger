@@ -590,7 +590,6 @@
         _taxData    || fetch('/api/tax').then(r => r.json()),
       ]);
       _marketData = market;
-      for (const p of _marketData) { if (p.ticker && p.exchange) _exchangeMap[p.ticker] = YF_TO_GF[p.exchange] || p.exchange; }
       _taxData = tax;
       renderDividends(_marketData, _taxData);
     } catch (err) {
@@ -609,7 +608,6 @@
         _taxData    || fetch('/api/tax').then(r => r.json()),
       ]);
       _marketData = market;
-      for (const p of _marketData) { if (p.ticker && p.exchange) _exchangeMap[p.ticker] = YF_TO_GF[p.exchange] || p.exchange; }
       _taxData = tax;
       renderEarnings(_marketData, _taxData);
     } catch (err) {
@@ -707,7 +705,7 @@
     tbody.innerHTML = data.positions
       .filter(p => p.value >= 1)
       .map(p => {
-        const label = tickerLink(p.ticker || p.security_name.slice(0, 15));
+        const label = tickerLink(p.ticker || p.security_name.slice(0, 15), p.type_display);
         const flag  = flaggedTickers.has(p.ticker)
           ? '<span class="flag-icon" title="Concentration flag">&#9888;</span>' : '';
         const color = colorFor(p.type_display);
@@ -727,24 +725,11 @@
   }
 
   // ── Ticker link ───────────────────────────────────────────────
-  const SKIP_LINK = new Set(['FCASH', 'CUR:USD', '']);
-  // yfinance exchange code → Google Finance exchange suffix
-  const YF_TO_GF = {
-    'NMS': 'NASDAQ', 'NGM': 'NASDAQ', 'NCM': 'NASDAQ',
-    'NasdaqGS': 'NASDAQ', 'NasdaqGM': 'NASDAQ', 'NasdaqCM': 'NASDAQ',
-    'NYQ': 'NYSE', 'NYSE': 'NYSE',
-    'PCX': 'NYSEARCA', 'NYSEARCA': 'NYSEARCA',
-    'ASE': 'NYSEAMERICAN', 'AMEX': 'NYSEAMERICAN',
-    'BTS': 'NYSEARCA',
-  };
-  let _exchangeMap = {};  // ticker → GF exchange, populated from market data
+  const LINK_TYPES = new Set(['Stock', 'ETF']);
 
-  function tickerLink(ticker, exchange) {
-    if (!ticker || SKIP_LINK.has(ticker)) return ticker || '—';
-    const gfEx = exchange ? (YF_TO_GF[exchange] || exchange)
-                          : (_exchangeMap[ticker] || '');
-    const symbol = gfEx ? `${ticker}:${gfEx}` : ticker;
-    const url = `https://www.google.com/finance/quote/${symbol}`;
+  function tickerLink(ticker, typeDisplay) {
+    if (!ticker || !LINK_TYPES.has(typeDisplay)) return ticker || '—';
+    const url = `https://finance.yahoo.com/quote/${encodeURIComponent(ticker)}`;
     return `<a class="ticker-link" href="${url}" target="_blank" rel="noopener noreferrer">${ticker}</a>`;
   }
 
@@ -840,7 +825,7 @@
       const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollar(bucketIncome)}/yr</span>`;
 
       const rows = positions.map(p => {
-        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.exchange);
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.type_display);
         const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
         const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
         const inc = p._income != null ? fmtDollar(p._income) : '—';
@@ -935,7 +920,7 @@
         : '';
 
       const rows = positions.map(p => {
-        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.exchange);
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.type_display);
         const type = p.type_display || 'Cash';
         if (type === 'Cash' || type === 'Fixed Income') {
           return `<tr>
@@ -1039,7 +1024,6 @@
     btn.disabled = true;
     _marketData = null;
     _taxData = null;
-    _exchangeMap = {};
     try {
       const data = await fetch('/api/refresh').then(r => r.json());
       _summaryData = data;
