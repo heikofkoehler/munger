@@ -254,9 +254,10 @@ def calculate_metrics(df) -> dict:
 
     positions = []
     for _, row in df.iterrows():
+        ticker = normalize_ticker(row["ticker"] or f"UNKNOWN_{row['security_id']}", aggregate_classes=False)
         weight = (row["value"] / total * 100) if total else 0.0
         positions.append({
-            "ticker": row["ticker"],
+            "ticker": ticker,
             "security_name": row["security_name"],
             "value": round(float(row["value"]), 2),
             "weight_pct": round(float(weight), 4),
