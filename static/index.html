@@ -925,11 +925,14 @@
       const rows = positions.map(p => {
         const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
         const type = p.type_display || 'Cash';
+        const color = colorFor(type);
+        const typeBadge = `<span class="type-badge" style="background:${color}22;color:${color}">${type}</span>`;
         if (type === 'Cash' || type === 'Fixed Income') {
           return `<tr>
             <td class="td-ticker">${ticker}</td>
             <td class="td-name">${p.security_name || '—'}</td>
             <td class="td-value">${fmtDollar(p.value)}</td>
+            <td>${typeBadge}</td>
             <td class="td-muted">—</td><td class="td-muted">—</td>
             <td class="td-muted">—</td><td class="td-muted">—</td>
             <td class="td-muted">—</td>
@@ -939,6 +942,7 @@
           <td class="td-ticker">${ticker}</td>
           <td class="td-name">${p.security_name || '—'}</td>
           <td class="td-value">${fmtDollar(p.value)}</td>
+          <td>${typeBadge}</td>
           <td class="td-muted">${p.sector || '—'}</td>
           <td class="td-num">${fmtNum(p.trailing_eps)}</td>
           <td class="td-num">${p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—'}</td>
@@ -954,7 +958,7 @@
         </div>
         <table>
           <thead><tr>
-            <th>Ticker</th><th>Name</th><th>Value</th><th>Sector</th>
+            <th>Ticker</th><th>Name</th><th>Value</th><th>Type</th><th>Sector</th>
             <th>Trailing EPS</th><th>Trailing P/E</th><th>Forward P/E</th><th>Market Cap</th>
           </tr></thead>
           <tbody>${rows}</tbody>
