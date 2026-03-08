@@ -39,10 +39,8 @@ Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
 
 ```bash
 pip install -r requirements.txt
-# create .env with your data source
-echo "CSV_PATH=portfolio_holdings.csv" > .env
-# or for Google Sheets:
-echo "SHEET_ID=your_sheet_id_here" > .env
+cp .env.example .env
+# edit .env with your SHEET_ID or CSV_PATH
 ```
 
 For Google Sheets, download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window opens on first run to authorize; the token is cached locally in `token.json`.
