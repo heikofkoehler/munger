@@ -1075,18 +1075,28 @@
     if (!account) return;
 
     const totalValue = account.holdings.reduce((s, h) => s + h.value, 0);
+    const totalCostBasis = account.holdings.reduce((s, h) => s + (h.cost_basis || 0), 0);
+    const totalGain = totalValue - totalCostBasis;
+    const hasBasis = account.holdings.some(h => h.cost_basis > 0);
+
     const rows = account.holdings.map(h => {
       const ticker = tickerLink(h.ticker || (h.security_name || '').slice(0, 15));
       const type = h.type_display || '—';
       const color = colorFor(type);
       const qty = h.quantity > 0 ? fmtNum(h.quantity, h.quantity % 1 === 0 ? 0 : 4) : '—';
       const price = (h.quantity > 0 && h.value > 0) ? fmtDollarFull(h.value / h.quantity) : '—';
+      const basis = h.cost_basis > 0 ? fmtDollar(h.cost_basis) : '—';
+      const gain = h.cost_basis > 0 ? h.value - h.cost_basis : null;
+      const gainColor = gain == null ? '' : gain >= 0 ? 'color:var(--accent-teal)' : 'color:var(--accent-red)';
+      const gainCell = gain == null ? '—' : `<span style="${gainColor}">${gain >= 0 ? '+' : ''}${fmtDollar(gain)}</span>`;
       return `<tr>
         <td class="td-ticker">${ticker}</td>
         <td class="td-name">${h.security_name}</td>
         <td class="td-num">${qty}</td>
         <td class="td-num">${price}</td>
         <td class="td-value">${fmtDollar(h.value)}</td>
+        <td class="td-num">${basis}</td>
+        <td class="td-num">${gainCell}</td>
         <td><span class="type-badge" style="background:${color}22;color:${color}">${type}</span></td>
       </tr>`;
     }).join('');
@@ -1103,12 +1113,14 @@
       <div class="card">
         <table>
           <thead><tr>
-            <th>Ticker</th><th>Name</th><th>Qty</th><th>Price/Share</th><th>Value</th><th>Type</th>
+            <th>Ticker</th><th>Name</th><th>Qty</th><th>Price/Share</th><th>Value</th><th>Cost Basis</th><th>Gain / Loss</th><th>Type</th>
           </tr></thead>
           <tbody>${rows}</tbody>
           <tfoot><tr style="border-top:1px solid var(--border)">
             <td colspan="4" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
             <td style="padding:0.7rem 0.75rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtDollarFull(totalValue)}</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${hasBasis ? fmtDollarFull(totalCostBasis) : '—'}</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;${hasBasis ? (totalGain >= 0 ? 'color:var(--accent-teal)' : 'color:var(--accent-red)') : ''}">${hasBasis ? (totalGain >= 0 ? '+' : '') + fmtDollarFull(totalGain) : '—'}</td>
             <td></td>
           </tfoot>
         </table>
