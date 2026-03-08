@@ -704,7 +704,7 @@ def calculate_tax_buckets(df_raw) -> dict:
         holdings = sorted(
             [
                 {
-                    "ticker": str(row["ticker"]),
+                    "ticker": normalize_ticker(str(row["ticker"]) or f"UNKNOWN_{row['security_id']}"),
                     "security_name": str(row["security_name"]),
                     "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
                     "value": round(float(row["value"]), 2),
