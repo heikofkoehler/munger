@@ -791,7 +791,7 @@
         }
       }
       const positions = Object.values(agg)
-        .map(h => ({ ...h, ...(h.ticker ? (mktMap[h.ticker] || {}) : {}) }))
+        .map(h => ({ ...(h.ticker ? (mktMap[h.ticker] || {}) : {}), ...h }))
         // Use value × yield (not quantity × rate) — quantity is the global total, value is bucket-specific
         .map(p => ({ ...p, _income: (p.dividend_yield && p.value) ? p.value * p.dividend_yield / 100 : null }))
         .sort((a, b) => (b._income || 0) - (a._income || 0));
@@ -877,7 +877,7 @@
         }
       }
       const positions = Object.values(agg)
-        .map(h => ({ ...h, ...(h.ticker ? (mktMap[h.ticker] || {}) : {}) }))
+        .map(h => ({ ...(h.ticker ? (mktMap[h.ticker] || {}) : {}), ...h }))
         .sort((a, b) => b.value - a.value);
 
       // Bucket weighted P/E
