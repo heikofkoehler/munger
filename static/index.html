@@ -907,7 +907,7 @@
     const total = data.total_value;
 
     // Hero grid: show Taxable, Tax-Deferred, Tax-Advantaged (529) prominently
-    const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Advantaged (529)'];
+    const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Exempt (Roth)'];
     const heroCards = heroKeys.map(label => {
       const b = buckets[label];
       const val = b ? b.value : 0;

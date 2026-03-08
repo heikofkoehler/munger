@@ -337,14 +337,9 @@ def enrich_with_market_data(positions: list) -> list:
 # ---------------------------------------------------------------------------
 
 _TAX_RULES = [
-    ("Roth",                "Tax-Exempt (Roth)"),
-    ("529",                 "Tax-Advantaged (529)"),
-    ("Rollover IRA",        "Tax-Deferred"),
-    ("Traditional IRA",     "Tax-Deferred"),
-    ("401",                 "Tax-Deferred"),
-    ("Equity Awards",       "Taxable"),
-    ("Individual Brokerage","Taxable"),
-    ("Individual - TOD",    "Taxable"),
+    ("Roth", "Tax-Exempt (Roth)"),  # must precede IRA so "Roth IRA" → exempt
+    ("IRA",  "Tax-Deferred"),
+    ("401",  "Tax-Deferred"),
 ]
 
 
@@ -352,7 +347,7 @@ def _classify_account(account_name: str) -> str:
     for pattern, bucket in _TAX_RULES:
         if pattern in account_name:
             return bucket
-    return "Other / Unclassified"
+    return "Taxable"
 
 
 def calculate_tax_buckets(df_raw) -> dict:
