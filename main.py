@@ -67,7 +67,7 @@ def market():
 @app.get("/api/tax")
 def tax():
     if "tax" not in _cache:
-        _cache["tax"] = calculate_tax_buckets(_cache["df_raw"])
+        _cache["tax"] = calculate_tax_buckets(normalize_asset_class(_cache["df_raw"]))
     return _cache["tax"]
 
 

@@ -424,6 +424,42 @@
       margin-bottom: 1.5rem;
     }
 
+    /* ── Account links & detail ──────────────────────────────── */
+    .account-link {
+      cursor: pointer;
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+    .account-link:hover { color: var(--accent-purple); text-decoration: underline; }
+
+    .detail-header {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+      padding: 1.25rem 1.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .detail-header-info { flex: 1; }
+    .detail-header-title { font-size: 18px; font-weight: 700; color: var(--text-primary); }
+    .detail-header-sub { font-size: 13px; color: var(--text-muted); margin-top: 0.2rem; }
+    .detail-header-value { font-size: 22px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .detail-back {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .detail-back:hover { border-color: var(--accent-purple); color: var(--text-primary); }
+
     /* ── Loading state ──────────────────────────────────────── */
     #loading {
       position: fixed; inset: 0;
@@ -449,7 +485,7 @@
   <button class="tab-btn active" onclick="switchTab('portfolio')">Portfolio</button>
   <button class="tab-btn" onclick="switchTab('dividends')">Dividends</button>
   <button class="tab-btn" onclick="switchTab('earnings')">Earnings</button>
-  <button class="tab-btn" onclick="switchTab('tax')">Tax</button>
+  <button class="tab-btn" onclick="switchTab('accounts')">Accounts</button>
 </nav>
 
 <div class="content">
@@ -506,9 +542,9 @@
     <div id="earn-content"></div>
   </div>
 
-  <!-- ── Tax tab ── -->
-  <div id="panel-tax" class="tab-panel">
-    <div id="tax-content"></div>
+  <!-- ── Accounts tab ── -->
+  <div id="panel-accounts" class="tab-panel">
+    <div id="accounts-content"></div>
   </div>
 
 </div>
@@ -571,8 +607,8 @@
       loadDividends();
     } else if (name === 'earnings') {
       loadEarnings();
-    } else if (name === 'tax') {
-      loadTax();
+    } else if (name === 'accounts') {
+      loadAccounts();
     }
   }
 
@@ -616,16 +652,16 @@
     }
   }
 
-  // ── Tax data lazy load ────────────────────────────────────────
-  async function loadTax() {
-    if (_taxData) { renderTax(_taxData); return; }
-    document.getElementById('tax-content').innerHTML = spinner('Computing tax buckets…');
+  // ── Accounts data lazy load ───────────────────────────────────
+  async function loadAccounts() {
+    if (_taxData) { renderAccounts(_taxData); return; }
+    document.getElementById('accounts-content').innerHTML = spinner('Loading accounts…');
     try {
       _taxData = await fetch('/api/tax').then(r => r.json());
-      renderTax(_taxData);
+      renderAccounts(_taxData);
     } catch (err) {
-      document.getElementById('tax-content').innerHTML =
-        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load tax data: ${err.message}</div>`;
+      document.getElementById('accounts-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load accounts: ${err.message}</div>`;
     }
   }
 
@@ -976,12 +1012,12 @@
     document.querySelectorAll('#earn-content table').forEach(makeSortable);
   }
 
-  // ── Tax renderer ──────────────────────────────────────────────
-  function renderTax(data) {
+  // ── Accounts renderer ─────────────────────────────────────────
+  function renderAccounts(data) {
     const buckets = data.buckets;
     const total = data.total_value;
 
-    // Hero grid: show Taxable, Tax-Deferred, Tax-Advantaged (529) prominently
+    // Hero grid
     const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Exempt (Roth)'];
     const heroCards = heroKeys.map(label => {
       const b = buckets[label];
@@ -994,14 +1030,15 @@
       </div>`;
     }).join('');
 
-    // Per-bucket detail cards
+    // Per-bucket account cards — account names are clickable links
     const bucketCards = Object.entries(buckets).map(([label, b]) => {
       const accountRows = b.accounts.map(acct => {
         const barPct = total > 0 ? (acct.value / total * 100) : 0;
+        const nameAttr = JSON.stringify(acct.account_name);
         return `<div class="tax-account-row">
           <div class="tax-account-header">
             <div>
-              <span class="tax-account-name">${acct.account_name}</span>
+              <span class="account-link" onclick="showAccountDetail(${nameAttr})">${acct.account_name}</span>
               <span class="tax-account-inst"> · ${acct.institution_name}</span>
             </div>
             <div class="tax-account-val">${fmtDollar(acct.value)}</div>
@@ -1018,10 +1055,57 @@
       </div>`;
     }).join('');
 
-    document.getElementById('tax-content').innerHTML = `
+    document.getElementById('accounts-content').innerHTML = `
       <div class="grid-3">${heroCards}</div>
       <p class="tax-note">No cost basis — showing current market value only</p>
       ${bucketCards}`;
+  }
+
+  // ── Account detail view ───────────────────────────────────────
+  function showAccountDetail(accountName) {
+    let account = null, bucketLabel = '';
+    for (const [label, bucket] of Object.entries(_taxData.buckets)) {
+      const found = bucket.accounts.find(a => a.account_name === accountName);
+      if (found) { account = found; bucketLabel = label; break; }
+    }
+    if (!account) return;
+
+    const totalValue = account.holdings.reduce((s, h) => s + h.value, 0);
+    const rows = account.holdings.map(h => {
+      const ticker = tickerLink(h.ticker || (h.security_name || '').slice(0, 15));
+      const type = h.type_display || '—';
+      const color = colorFor(type);
+      return `<tr>
+        <td class="td-ticker">${ticker}</td>
+        <td class="td-name">${h.security_name}</td>
+        <td class="td-value">${fmtDollar(h.value)}</td>
+        <td><span class="type-badge" style="background:${color}22;color:${color}">${type}</span></td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('accounts-content').innerHTML = `
+      <div class="detail-header">
+        <button class="detail-back" onclick="renderAccounts(_taxData)">← Back</button>
+        <div class="detail-header-info">
+          <div class="detail-header-title">${account.account_name}</div>
+          <div class="detail-header-sub">${account.institution_name} &nbsp;·&nbsp; ${bucketLabel}</div>
+        </div>
+        <div class="detail-header-value">${fmtDollarFull(totalValue)}</div>
+      </div>
+      <div class="card">
+        <table>
+          <thead><tr>
+            <th>Ticker</th><th>Name</th><th>Value</th><th>Type</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr style="border-top:1px solid var(--border)">
+            <td colspan="2" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;font-weight:700;font-variant-numeric:tabular-nums">${fmtDollarFull(totalValue)}</td>
+            <td></td>
+          </tfoot>
+        </table>
+      </div>`;
+    document.querySelectorAll('#accounts-content table').forEach(makeSortable);
   }
 
   // ── Refresh ───────────────────────────────────────────────────
@@ -1040,8 +1124,8 @@
         loadDividends();
       } else if (_activeTab === 'earnings') {
         loadEarnings();
-      } else if (_activeTab === 'tax') {
-        loadTax();
+      } else if (_activeTab === 'accounts') {
+        loadAccounts();
       }
     } finally {
       btn.textContent = 'Refresh Data';

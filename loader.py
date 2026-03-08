@@ -370,6 +370,7 @@ def calculate_tax_buckets(df_raw) -> dict:
                     "ticker": str(row["ticker"]),
                     "security_name": str(row["security_name"]),
                     "value": round(float(row["value"]), 2),
+                    "type_display": str(row["type_display"]),
                 }
                 for _, row in acct_df.iterrows()
                 if float(row["value"]) >= 0.01
