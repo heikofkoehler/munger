@@ -8,4 +8,5 @@ credentials.json
 __pycache__/
 *.pyc
 .venv/
+.data/
 venv/
