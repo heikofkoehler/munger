@@ -561,7 +561,7 @@
     });
 
     if (name === 'dividends') {
-      loadMarket('dividends');
+      loadDividends();
     } else if (name === 'earnings') {
       loadEarnings();
     } else if (name === 'tax') {
@@ -573,16 +573,21 @@
     return `<div class="spinner-wrap"><div class="spinner"></div><div>${msg}</div></div>`;
   }
 
-  // ── Market data lazy load (dividends only) ───────────────────
-  async function loadMarket(tab) {
-    if (_marketData) { renderDividends(_marketData); return; }
+  // ── Dividends lazy load (needs market + tax) ─────────────────
+  async function loadDividends() {
+    if (_marketData && _taxData) { renderDividends(_marketData, _taxData); return; }
     document.getElementById('div-content').innerHTML = spinner();
     try {
-      _marketData = await fetch('/api/market').then(r => r.json());
-      renderDividends(_marketData);
+      const [market, tax] = await Promise.all([
+        _marketData || fetch('/api/market').then(r => r.json()),
+        _taxData    || fetch('/api/tax').then(r => r.json()),
+      ]);
+      _marketData = market;
+      _taxData = tax;
+      renderDividends(_marketData, _taxData);
     } catch (err) {
       document.getElementById('div-content').innerHTML =
-        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load market data: ${err.message}</div>`;
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load: ${err.message}</div>`;
     }
   }
 
@@ -755,50 +760,76 @@
   }
 
   // ── Dividends renderer ────────────────────────────────────────
-  function renderDividends(positions) {
-    // Projected annual income = quantity * dividend_rate (per share)
-    let totalIncome = 0;
-    let totalValue = 0;
-    for (const p of positions) {
+  function _divIncome(p) {
+    if (p.dividend_rate && p.quantity) return p.quantity * p.dividend_rate;
+    if (p.dividend_yield && p.value)   return p.value * p.dividend_yield / 100;
+    return null;
+  }
+
+  function renderDividends(marketPositions, taxData) {
+    // ticker → market data map
+    const mktMap = {};
+    for (const p of marketPositions) { if (p.ticker) mktMap[p.ticker] = p; }
+
+    // Overall totals
+    let totalIncome = 0, totalValue = 0;
+    for (const p of marketPositions) {
       totalValue += p.value || 0;
-      if (p.dividend_rate && p.quantity) {
-        totalIncome += p.quantity * p.dividend_rate;
-      } else if (p.dividend_yield && p.value) {
-        totalIncome += p.value * p.dividend_yield / 100;
-      }
+      totalIncome += _divIncome(p) || 0;
     }
     const yieldOnValue = totalValue > 0 ? (totalIncome / totalValue * 100) : 0;
 
-    const rows = positions
-      .filter(p => p.value >= 1)
-      .map(p => {
-        let income = null;
-        if (p.dividend_rate && p.quantity) {
-          income = p.quantity * p.dividend_rate;
-        } else if (p.dividend_yield && p.value) {
-          // ETFs often have yield but no per-share rate — derive from position value
-          income = p.value * p.dividend_yield / 100;
+    // One card per tax bucket
+    const sections = Object.entries(taxData.buckets).map(([label, bucket]) => {
+      // Aggregate holdings by ticker across accounts in this bucket
+      const agg = {};
+      for (const acct of bucket.accounts) {
+        for (const h of acct.holdings) {
+          const key = h.ticker || h.security_name;
+          if (!agg[key]) agg[key] = { ticker: h.ticker, security_name: h.security_name, value: 0 };
+          agg[key].value += h.value;
         }
-        const divYield = p.dividend_yield != null ? p.dividend_yield : null;
-        return { ...p, _income: income, _yield: divYield };
-      })
-      .sort((a, b) => (b._income || 0) - (a._income || 0));
+      }
+      const positions = Object.values(agg)
+        .map(h => ({ ...h, ...(h.ticker ? (mktMap[h.ticker] || {}) : {}) }))
+        .map(p => ({ ...p, _income: _divIncome(p) }))
+        .sort((a, b) => (b._income || 0) - (a._income || 0));
 
-    const tableRows = rows.map(p => {
-      const ticker = p.ticker || p.security_name.slice(0, 15);
-      const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
-      const yld = p._yield != null ? fmtNum(p._yield) + '%' : '—';
-      const inc = p._income != null ? fmtDollar(p._income) : '—';
-      const wt = fmtPct(p.weight_pct);
-      return `<tr>
-        <td class="td-ticker">${ticker}</td>
-        <td class="td-name">${p.security_name}</td>
-        <td class="td-value">${fmtDollar(p.value)}</td>
-        <td class="td-num">${annualRate}</td>
-        <td class="td-num">${yld}</td>
-        <td class="td-num" style="color:var(--accent-teal)">${inc}</td>
-        <td class="td-weight">${wt}</td>
-      </tr>`;
+      const bucketIncome = positions.reduce((s, p) => s + (p._income || 0), 0);
+      const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollar(bucketIncome)}/yr</span>`;
+
+      const rows = positions.map(p => {
+        const ticker = p.ticker || (p.security_name || '').slice(0, 15) || '—';
+        const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
+        const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
+        const inc = p._income != null ? fmtDollar(p._income) : '—';
+        return `<tr>
+          <td class="td-ticker">${ticker}</td>
+          <td class="td-name">${p.security_name || '—'}</td>
+          <td class="td-value">${fmtDollar(p.value)}</td>
+          <td class="td-num">${annualRate}</td>
+          <td class="td-num">${yld}</td>
+          <td class="td-num" style="color:var(--accent-teal)">${inc}</td>
+        </tr>`;
+      }).join('');
+
+      return `<div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>${label} &nbsp;·&nbsp; ${fmtDollar(bucket.value)} (${fmtNum(bucket.weight_pct)}%)</span>
+          ${incomeTag}
+        </div>
+        <table>
+          <thead><tr>
+            <th>Ticker</th><th>Name</th><th>Value</th>
+            <th>Annual $/Share</th><th>Yield</th><th>Projected Income</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+          <tfoot><tr style="border-top:1px solid var(--border)">
+            <td colspan="5" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(bucketIncome)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
     }).join('');
 
     document.getElementById('div-content').innerHTML = `
@@ -807,26 +838,7 @@
         <div class="hero-value" style="color:var(--accent-teal)">${fmtDollar(totalIncome)}</div>
         <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total holdings: ${fmtDollarFull(totalValue)}</div>
       </div>
-      <div class="card">
-        <div class="card-title">Dividend Details</div>
-        <table>
-          <thead><tr>
-            <th>Ticker</th>
-            <th>Name</th>
-            <th>Value</th>
-            <th>Annual $/Share</th>
-            <th>Yield</th>
-            <th>Projected Income</th>
-            <th>Weight</th>
-          </tr></thead>
-          <tbody>${tableRows}</tbody>
-          <tfoot><tr style="border-top:1px solid var(--border)">
-            <td colspan="5" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
-            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(totalIncome)}</td>
-            <td></td>
-          </tr></tfoot>
-        </table>
-      </div>`;
+      ${sections}`;
   }
 
   // ── Earnings renderer ─────────────────────────────────────────
@@ -990,7 +1002,7 @@
       renderDashboard(data);
       // Re-render current tab if it's not portfolio
       if (_activeTab === 'dividends') {
-        loadMarket('dividends');
+        loadDividends();
       } else if (_activeTab === 'earnings') {
         loadEarnings();
       } else if (_activeTab === 'tax') {
