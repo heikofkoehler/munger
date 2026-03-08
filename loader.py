@@ -200,7 +200,20 @@ def deduplicate(df):
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
     
-    # Normalize tickers for consistent display and merging.
+    # 1. Apply TICKER_OVERRIDES first (using security_id or raw name)
+    # This ensures that items with empty tickers are merged correctly.
+    def get_initial_ticker(row):
+        t = row.get("ticker") or ""
+        if not t or t.startswith("UNKNOWN"):
+            # Check if security_id or name is in overrides
+            sid = str(row.get("security_id", ""))
+            name = str(row.get("security_name", ""))
+            return TICKER_OVERRIDES.get(sid, TICKER_OVERRIDES.get(name, t))
+        return t
+
+    df["ticker"] = df.apply(get_initial_ticker, axis=1)
+
+    # 2. Normalize tickers for consistent display and merging.
     if "ticker" in df.columns:
         df["ticker"] = df["ticker"].apply(lambda t: normalize_ticker(t, aggregate_classes=False))
 
