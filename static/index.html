@@ -829,10 +829,13 @@
         const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
         const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
         const inc = p._income != null ? fmtDollar(p._income) : '—';
+        const type = p.type_display || '—';
+        const color = colorFor(type);
         return `<tr>
           <td class="td-ticker">${ticker}</td>
           <td class="td-name">${p.security_name || '—'}</td>
           <td class="td-value">${fmtDollar(p.value)}</td>
+          <td><span class="type-badge" style="background:${color}22;color:${color}">${type}</span></td>
           <td class="td-num">${annualRate}</td>
           <td class="td-num">${yld}</td>
           <td class="td-num" style="color:var(--accent-teal)">${inc}</td>
@@ -846,12 +849,12 @@
         </div>
         <table>
           <thead><tr>
-            <th>Ticker</th><th>Name</th><th>Value</th>
+            <th>Ticker</th><th>Name</th><th>Value</th><th>Type</th>
             <th>Annual $/Share</th><th>Yield</th><th>Projected Income</th>
           </tr></thead>
           <tbody>${rows}</tbody>
           <tfoot><tr style="border-top:1px solid var(--border)">
-            <td colspan="5" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
+            <td colspan="6" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Total</td>
             <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(bucketIncome)}</td>
           </tr></tfoot>
         </table>
