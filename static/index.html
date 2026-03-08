@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Munger — Portfolio</title>
+  <!-- Plotly.js pinned 2.32.0 via jsDelivr — no tracking, no cookies -->
+  <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.32.0/plotly.min.js"></script>
+  <style>
+    /* ── Variables ──────────────────────────────────────────── */
+    :root {
+      --bg-page:     #0f1117;
+      --bg-card:     #1a1d27;
+      --bg-card-2:   #22263a;
+      --border:      #2e3347;
+      --text-primary:   #f0f2f5;
+      --text-secondary: #8891a8;
+      --text-muted:     #4d5568;
+      --accent-purple:  #6c63ff;
+      --accent-teal:    #00d4aa;
+      --accent-blue:    #3b82f6;
+      --accent-amber:   #f5a623;
+      --accent-red:     #e05c5c;
+      --color-stock:    #6c63ff;
+      --color-etf:      #00d4aa;
+      --color-fi:       #3b82f6;
+      --color-cash:     #8891a8;
+      --color-mf:       #f5a623;
+    }
+
+    /* ── Reset ──────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg-page);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ─────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .brand {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--text-primary);
+    }
+    .brand span { color: var(--accent-purple); }
+    #refresh-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    #refresh-btn:hover { border-color: var(--accent-purple); color: var(--text-primary); }
+    #refresh-btn:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Layout ─────────────────────────────────────────────── */
+    .page { max-width: 1280px; margin: 0 auto; padding: 2rem 2rem 4rem; }
+
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .card-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 1.25rem;
+    }
+
+    /* ── Hero ───────────────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      padding: 3rem 1rem 2.5rem;
+    }
+    .hero-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.5rem;
+    }
+    .hero-value {
+      font-size: 56px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .hero-date {
+      margin-top: 0.75rem;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* ── 2-column grid ──────────────────────────────────────── */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .grid-2 .card { margin-bottom: 0; }
+
+    /* ── Sunburst ───────────────────────────────────────────── */
+    #sunburst-chart { height: 380px; }
+
+    /* ── Concentration flags ────────────────────────────────── */
+    .flags-empty {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 0.5rem;
+    }
+    .flag-card {
+      background: var(--bg-card-2);
+      border: 1px solid var(--accent-red);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .flag-ticker {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent-red);
+      margin-bottom: 0.25rem;
+    }
+    .flag-weight {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .flag-of { font-size: 13px; color: var(--text-secondary); margin-left: 4px; }
+    .flag-threshold {
+      margin-top: 0.4rem;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .flag-over { color: var(--accent-amber); font-weight: 600; }
+    .no-flags {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--accent-teal);
+      font-size: 13px;
+      margin-top: 0.25rem;
+    }
+
+    /* ── Allocation legend (below sunburst) ─────────────────── */
+    .alloc-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem 1.25rem;
+      margin-top: 1rem;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+    .legend-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .legend-pct { color: var(--text-primary); font-weight: 600; }
+
+    /* ── Institutions ───────────────────────────────────────── */
+    .inst-row {
+      display: grid;
+      grid-template-columns: 180px 1fr 110px 52px;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .inst-row:last-child { border-bottom: none; }
+    .inst-name { font-size: 13px; color: var(--text-primary); }
+    .inst-bar-wrap {
+      background: var(--bg-card-2);
+      border-radius: 4px;
+      height: 6px;
+      overflow: hidden;
+    }
+    .inst-bar {
+      height: 100%;
+      border-radius: 4px;
+      background: var(--accent-purple);
+      transition: width 0.4s ease;
+    }
+    .inst-value {
+      font-size: 13px;
+      color: var(--text-primary);
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+    .inst-pct {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-align: right;
+    }
+
+    /* ── Positions table ────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    thead th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 0.75rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    thead th:not(:first-child) { text-align: right; }
+    thead th:first-child { padding-left: 0; }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background 0.1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--bg-card-2); }
+    tbody td {
+      padding: 0.7rem 0.75rem;
+      color: var(--text-primary);
+      vertical-align: middle;
+    }
+    tbody td:not(:first-child) { text-align: right; }
+    tbody td:first-child { padding-left: 0; }
+    .td-ticker {
+      font-weight: 600;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    .td-name { color: var(--text-secondary); }
+    .td-value { font-variant-numeric: tabular-nums; }
+    .td-weight { color: var(--text-secondary); }
+    .type-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .flag-icon {
+      display: inline-block;
+      color: var(--accent-amber);
+      font-size: 12px;
+      margin-left: 4px;
+    }
+
+    /* ── Loading state ──────────────────────────────────────── */
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg-page);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; color: var(--text-secondary);
+      z-index: 100;
+    }
+    #loading.hidden { display: none; }
+  </style>
+</head>
+<body>
+
+<div id="loading">Loading portfolio…</div>
+
+<header>
+  <div class="brand"><span>M</span>UNGER</div>
+  <button id="refresh-btn" onclick="refreshData()">Refresh Data</button>
+</header>
+
+<div class="page">
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-label">Net Worth</div>
+    <div id="total-value" class="hero-value">—</div>
+    <div id="price-date" class="hero-date">—</div>
+  </div>
+
+  <!-- Row 2: Sunburst + Flags -->
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Allocation</div>
+      <div id="sunburst-chart"></div>
+      <div id="alloc-legend" class="alloc-legend"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Concentration Risk</div>
+      <div id="flags-panel"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Institutions -->
+  <div class="card">
+    <div class="card-title">By Institution</div>
+    <div id="institutions-panel"></div>
+  </div>
+
+  <!-- Row 4: Positions -->
+  <div class="card">
+    <div class="card-title">Positions</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th>
+          <th>Name</th>
+          <th>Value</th>
+          <th>Weight</th>
+          <th>Type</th>
+        </tr>
+      </thead>
+      <tbody id="positions-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // ── Constants ─────────────────────────────────────────────────
+  const ASSET_COLORS = {
+    'Stock':        '#6c63ff',
+    'ETF':          '#00d4aa',
+    'Fixed Income': '#3b82f6',
+    'Cash':         '#8891a8',
+    'Mutual Fund':  '#f5a623',
+  };
+
+  function colorFor(type) {
+    return ASSET_COLORS[type] || '#4d5568';
+  }
+
+  // ── Formatters ────────────────────────────────────────────────
+  function fmtDollar(v) {
+    if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
+    if (v >= 1_000)     return '$' + (v / 1_000).toFixed(1) + 'K';
+    return '$' + v.toFixed(2);
+  }
+  function fmtDollarFull(v) {
+    return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  }
+  function fmtPct(v) { return v.toFixed(2) + '%'; }
+
+  // ── Hero ──────────────────────────────────────────────────────
+  function renderHero(data) {
+    document.getElementById('total-value').textContent = fmtDollarFull(data.total_value);
+    // Most recent price_updated from first position (if present), else today
+    const date = data._price_date
+      ? new Date(data._price_date).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'})
+      : 'Latest data';
+    document.getElementById('price-date').textContent = 'as of ' + date;
+  }
+
+  // ── Sunburst ──────────────────────────────────────────────────
+  function renderSunburst(data) {
+    const labels  = ['Portfolio'];
+    const parents = [''];
+    const values  = [data.total_value];
+    const colors  = ['rgba(0,0,0,0)'];
+    const texts   = [''];
+
+    // Inner ring: asset classes
+    for (const [ac, pct] of Object.entries(data.allocation)) {
+      labels.push(ac);
+      parents.push('Portfolio');
+      values.push(pct / 100 * data.total_value);
+      colors.push(colorFor(ac));
+      texts.push(ac + '<br>' + fmtPct(pct));
+    }
+
+    // Outer ring: individual positions
+    for (const pos of data.positions) {
+      if (pos.value < 1) continue;
+      const label = pos.ticker || pos.security_name.slice(0, 12);
+      labels.push(label);
+      parents.push(pos.type_display);
+      values.push(pos.value);
+      // Slightly transparent version of asset class color
+      const base = colorFor(pos.type_display);
+      colors.push(base + 'bb');
+      texts.push('');
+    }
+
+    const isDark = true;
+    Plotly.react('sunburst-chart', [{
+      type: 'sunburst',
+      labels, parents, values, text: texts,
+      marker: { colors, line: { width: 1.5, color: '#0f1117' } },
+      branchvalues: 'total',
+      hovertemplate: '<b>%{label}</b><br>%{value:$,.0f}<br>%{percentRoot:.1%} of portfolio<extra></extra>',
+      textinfo: 'label',
+      insidetextorientation: 'radial',
+      textfont: { family: '-apple-system, sans-serif', size: 11, color: '#f0f2f5' },
+      leaf: { opacity: 0.85 },
+    }], {
+      paper_bgcolor: '#1a1d27',
+      plot_bgcolor:  '#1a1d27',
+      margin: { t: 0, b: 0, l: 0, r: 0 },
+      showlegend: false,
+    }, {
+      responsive: true,
+      displayModeBar: false,
+    });
+
+    // Legend below chart
+    const legend = document.getElementById('alloc-legend');
+    legend.innerHTML = Object.entries(data.allocation)
+      .sort((a, b) => b[1] - a[1])
+      .map(([ac, pct]) => `
+        <div class="legend-item">
+          <div class="legend-dot" style="background:${colorFor(ac)}"></div>
+          ${ac} <span class="legend-pct">${fmtPct(pct)}</span>
+        </div>`).join('');
+  }
+
+  // ── Concentration flags ───────────────────────────────────────
+  function renderFlags(data) {
+    const panel = document.getElementById('flags-panel');
+    const flagged = data.concentration.filter(c => c.flagged);
+
+    if (!flagged.length) {
+      panel.innerHTML = `<div class="no-flags">✓ No concentration flags triggered</div>`;
+      return;
+    }
+
+    panel.innerHTML = flagged.map(f => `
+      <div class="flag-card">
+        <div class="flag-ticker">${f.ticker}</div>
+        <div>
+          <span class="flag-weight">${fmtPct(f.weight_pct)}</span>
+          <span class="flag-of">of portfolio</span>
+        </div>
+        <div class="flag-threshold">
+          Threshold ${fmtPct(f.threshold)}
+          &nbsp;·&nbsp;
+          <span class="flag-over">+${fmtPct(f.weight_pct - f.threshold)} over limit</span>
+        </div>
+      </div>`).join('');
+  }
+
+  // ── Institutions ──────────────────────────────────────────────
+  function renderInstitutions(data) {
+    const panel = document.getElementById('institutions-panel');
+    panel.innerHTML = data.institutions.map(inst => `
+      <div class="inst-row">
+        <div class="inst-name">${inst.institution_name}</div>
+        <div class="inst-bar-wrap">
+          <div class="inst-bar" style="width:${inst.weight_pct}%"></div>
+        </div>
+        <div class="inst-value">${fmtDollar(inst.value)}</div>
+        <div class="inst-pct">${fmtPct(inst.weight_pct)}</div>
+      </div>`).join('');
+  }
+
+  // ── Positions table ───────────────────────────────────────────
+  function renderPositions(data) {
+    const flaggedTickers = new Set(
+      data.concentration.filter(c => c.flagged).map(c => c.ticker)
+    );
+
+    const tbody = document.getElementById('positions-body');
+    tbody.innerHTML = data.positions
+      .filter(p => p.value >= 1)
+      .map(p => {
+        const label = p.ticker || p.security_name.slice(0, 15);
+        const flag  = flaggedTickers.has(p.ticker)
+          ? '<span class="flag-icon" title="Concentration flag">⚠</span>' : '';
+        const color = colorFor(p.type_display);
+        return `
+          <tr>
+            <td class="td-ticker">${label}${flag}</td>
+            <td class="td-name">${p.security_name}</td>
+            <td class="td-value">${fmtDollar(p.value)}</td>
+            <td class="td-weight">${fmtPct(p.weight_pct)}</td>
+            <td>
+              <span class="type-badge" style="background:${color}22;color:${color}">
+                ${p.type_display}
+              </span>
+            </td>
+          </tr>`;
+      }).join('');
+  }
+
+  // ── Main render ───────────────────────────────────────────────
+  function renderDashboard(data) {
+    renderHero(data);
+    renderSunburst(data);
+    renderFlags(data);
+    renderInstitutions(data);
+    renderPositions(data);
+  }
+
+  // ── Refresh ───────────────────────────────────────────────────
+  async function refreshData() {
+    const btn = document.getElementById('refresh-btn');
+    btn.textContent = 'Refreshing…';
+    btn.disabled = true;
+    try {
+      const data = await fetch('/api/refresh').then(r => r.json());
+      renderDashboard(data);
+    } finally {
+      btn.textContent = 'Refresh Data';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Init ──────────────────────────────────────────────────────
+  fetch('/api/summary')
+    .then(r => r.json())
+    .then(data => {
+      renderDashboard(data);
+      document.getElementById('loading').classList.add('hidden');
+    })
+    .catch(err => {
+      document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
+    });
+</script>
+</body>
+</html>

@@ -241,9 +241,25 @@ def check_concentration(df, thresholds: dict = None) -> list:
             "ticker": ticker,
             "weight_pct": round(float(weight), 4),
             "threshold": threshold,
-            "flagged": weight > threshold,
+            "flagged": bool(weight > threshold),
         })
     return results
+
+
+# ---------------------------------------------------------------------------
+# 7. Institutions summary
+# ---------------------------------------------------------------------------
+
+def calculate_institutions(df_raw) -> list:
+    """Summarize total value per institution from the raw (pre-dedup) DataFrame."""
+    import pandas as pd
+    df = df_raw.copy()
+    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
+    grouped = df.groupby("institution_name")["value"].sum().reset_index()
+    total = grouped["value"].sum()
+    grouped["weight_pct"] = (grouped["value"] / total * 100).round(4)
+    grouped = grouped.sort_values("value", ascending=False)
+    return grouped.to_dict(orient="records")
 
 
 # ---------------------------------------------------------------------------
