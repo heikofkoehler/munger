@@ -16,6 +16,7 @@ from loader import (
     normalize_asset_class,
     calculate_metrics,
     calculate_risk_metrics,
+    calculate_efficiency_metrics,
     save_risk_snapshot,
     calculate_institutions,
     enrich_with_market_data,
@@ -44,6 +45,7 @@ def _build_cache() -> None:
     _cache.pop("market", None)
     _cache.pop("risk", None)
     _cache.pop("tax", None)
+    _cache.pop("efficiency", None)
 
 
 _build_cache()
@@ -88,6 +90,13 @@ def tax():
     if "tax" not in _cache:
         _cache["tax"] = calculate_tax_buckets(normalize_asset_class(_cache["df_raw"]))
     return _cache["tax"]
+
+
+@app.get("/api/efficiency")
+def efficiency():
+    if "efficiency" not in _cache:
+        _cache["efficiency"] = calculate_efficiency_metrics(_cache["df_clean"])
+    return _cache["efficiency"]
 
 
 @app.get("/api/refresh")

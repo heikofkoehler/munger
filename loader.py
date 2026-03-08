@@ -353,6 +353,76 @@ def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
         print(f"Error saving risk snapshot: {e}", file=sys.stderr)
 
 
+def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> dict:
+    """
+    Calculate detailed portfolio efficiency metrics, including wealth gap projections
+    and high-cost asset benchmarking.
+    """
+    total_value = df["value"].sum()
+    if total_value <= 0:
+        return {
+            "weighted_expense_ratio": 0.0,
+            "total_annual_cost": 0.0,
+            "projections": [],
+            "high_cost_assets": []
+        }
+
+    # 1. Individual Asset Analysis
+    total_annual_cost = 0.0
+    high_cost_assets = []
+    
+    for _, row in df.iterrows():
+        is_fund = row["type_display"] in ["ETF", "Mutual Fund"]
+        if is_fund and row["ticker"]:
+            details = get_fund_details(row["ticker"])
+            exp_ratio = details.get("expense_ratio") or 0.0
+            
+            annual_cost = row["value"] * exp_ratio
+            total_annual_cost += annual_cost
+            
+            # Benchmarking
+            status = "Green"
+            if exp_ratio > 0.005: status = "Red"
+            elif exp_ratio > 0.002: status = "Amber"
+            
+            potential_savings = row["value"] * (exp_ratio - benchmark_fee) if exp_ratio > benchmark_fee else 0.0
+            
+            high_cost_assets.append({
+                "ticker": row["ticker"],
+                "name": row["security_name"],
+                "value": round(float(row["value"]), 2),
+                "exp_ratio": round(float(exp_ratio), 4),
+                "annual_cost": round(float(annual_cost), 2),
+                "potential_savings": round(float(potential_savings), 2),
+                "status": status
+            })
+
+    wer = total_annual_cost / total_value
+    
+    # 2. Wealth Gap Projections (10, 20, 30 years)
+    projections = []
+    for years in [10, 20, 30]:
+        # Scenario A: Current (r - f)
+        current_val = total_value * ((1 + (growth_rate - wer)) ** years)
+        # Scenario B: Optimized (r - benchmark)
+        optimized_val = total_value * ((1 + (growth_rate - benchmark_fee)) ** years)
+        wealth_gap = optimized_val - current_val
+        
+        projections.append({
+            "years": years,
+            "current_val": round(float(current_val), 2),
+            "optimized_val": round(float(optimized_val), 2),
+            "wealth_gap": round(float(wealth_gap), 2)
+        })
+
+    return {
+        "weighted_expense_ratio": round(float(wer), 6),
+        "total_annual_cost": round(float(total_annual_cost), 2),
+        "projections": projections,
+        "high_cost_assets": sorted(high_cost_assets, key=lambda x: x["annual_cost"], reverse=True)
+    }
+
+
 def calculate_risk_metrics(df) -> dict:
     """
     Calculate True Exposure (direct + indirect) and Weighted Expense Ratio.
