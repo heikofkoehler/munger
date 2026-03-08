@@ -148,6 +148,8 @@ TICKER_ALIASES = {
 TICKER_OVERRIDES = {
     "UNKNOWN_189993187450742649": "VBTIX", # Vanguard Total Bond Market Index Fund
     "UNKNOWN_189993188208175994": "VFFSX", # Vanguard 500 Index Fund
+    "Inst Tot Bd Mkt Ix Tr":      "VBTIX",
+    "Instl 500 Index Trust":      "VFFSX",
 }
 
 
@@ -225,6 +227,7 @@ def deduplicate(df):
 
 CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
 FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
+MUTUAL_FUND_TICKERS = {"VBTIX", "VFFSX"}
 
 
 def normalize_asset_class(df):
@@ -232,6 +235,7 @@ def normalize_asset_class(df):
     df = df.copy()
     df.loc[df["ticker"].isin(CASH_TICKERS), "type_display"] = "Cash"
     df.loc[df["ticker"].isin(FIXED_INCOME_TICKERS), "type_display"] = "Fixed Income"
+    df.loc[df["ticker"].isin(MUTUAL_FUND_TICKERS), "type_display"] = "Mutual Fund"
     return df
 
 
