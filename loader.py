@@ -107,13 +107,18 @@ def load_from_sheets(sheet_id: str):
     return df
 
 
-def load(sheet_id: str = None, csv_path: str = None):
+def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
     """
-    Dispatcher: load from CSV if csv_path or CSV_PATH env is set, else from Sheets.
+    Dispatcher: load from Monarch JSON, CSV, or Google Sheets (checked in that order).
     """
+    monarch_json = monarch_json or os.environ.get("MONARCH_JSON_PATH")
     csv_path = csv_path or os.environ.get("CSV_PATH")
     sheet_id = sheet_id or os.environ.get("SHEET_ID")
 
+    if monarch_json:
+        print(f"Loading from Monarch JSON: {monarch_json}", flush=True)
+        from monarch import load_from_json
+        return load_from_json(monarch_json)
     if csv_path:
         print(f"Loading from CSV: {csv_path}", flush=True)
         return load_from_csv(csv_path)
@@ -122,7 +127,7 @@ def load(sheet_id: str = None, csv_path: str = None):
         return load_from_sheets(sheet_id)
 
     raise ValueError(
-        "No data source configured. Set CSV_PATH or SHEET_ID environment variable."
+        "No data source configured. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID."
     )
 
 

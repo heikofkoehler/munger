@@ -4,6 +4,7 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from G
 
 ## Features
 
+- **Monarch Money integration** — fetches live portfolio via GraphQL API, stores full JSON response locally
 - **Google Sheets integration** — OAuth2 Authorization Code Flow, no service accounts
 - **CSV fallback** — drop in a local file for dev/offline use
 - **Position deduplication** — merges the same security held across multiple accounts by `security_id`
@@ -40,10 +41,23 @@ Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# edit .env with your SHEET_ID or CSV_PATH
+# edit .env with your data source
 ```
 
-For Google Sheets, download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window opens on first run to authorize; the token is cached locally in `token.json`.
+### Monarch Money (recommended)
+
+Grab your token from the Monarch UI (DevTools → Network → any request → `Authorization: Token <value>`), then fetch fresh data:
+
+```bash
+python monarch.py --token YOUR_TOKEN
+# saves monarch_response.json locally
+```
+
+Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. Re-run `monarch.py` whenever you want fresh data, then hit **Refresh Data** in the dashboard.
+
+### Google Sheets
+
+Download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window opens on first run to authorize; the token is cached locally in `token.json`.
 
 ## Google Sheet Format
 
@@ -55,9 +69,11 @@ The sheet must have these columns:
 
 | Variable | Default | Description |
 |---|---|---|
+| `MONARCH_JSON_PATH` | — | Path to stored Monarch response JSON (highest priority) |
+| `MONARCH_TOKEN` | — | Monarch API token (used by `monarch.py` to fetch fresh data) |
+| `CSV_PATH` | — | Local CSV path |
 | `SHEET_ID` | — | Google Sheet ID (from URL) |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | OAuth client secret file |
-| `CSV_PATH` | — | Local CSV path (overrides Sheets) |
 | `CONC_THRESHOLD` | `10.0` | Flag any position exceeding this % of portfolio |
 
 ## Security
