@@ -1,8 +1,8 @@
 
-Role: Expert Fintech Engineer & Python Architect
+**Role**: Expert Fintech Engineer & Python Architect
 Objective: Build a local-first, high-security portfolio analysis tool similar to Monarch Money or Empower.
 
-Data Environment:
+**Data Environment**:
 
 Source: A Google Sheet with columns: account_id, account_name, account_mask, institution_name, holding_name, ticker, type_display, quantity, value, security_id, security_name and price_updated.
 
@@ -12,7 +12,7 @@ Key Holdings to Handle:
 
 Deduplication: Multiple accounts hold VOO (Vanguard S&P 500 ETF); these must be merged into a single "Position View."
 
-Equity Awards: A large concentration in GOOG (Alphabet Inc Class C) under "Equity Awards" requires specific exposure tracking.
+Equity Awards: A large concentrations in specific securities requires exposure tracking.
 
 Fixed Income: Significant holdings in VCSH and VGSH should be categorized as "Fixed Income" rather than "Equities."
 
@@ -30,7 +30,7 @@ Zero Cloud: No financial data should ever leave the local machine except for the
 
 Calculation Engine: >    - Calculate Asset Allocation % by type_display.
 
-Calculate Concentration Risk: Specifically track and flag when GOOG or VOO exceeds user-defined thresholds.
+Calculate Concentration Risk: Specifically track and flag when securities exceeds user-defined thresholds.
 
 Calculate Account Weighting: Show distribution of assets across Fidelity, Schwab, etc.
 
@@ -43,8 +43,6 @@ Net Worth Hero: Large display of the sum of the value column.
 Allocation Sunburst: Interactive chart showing the breakdown of Stock vs. ETF vs. Cash.
 
 Institutions Table: A summary of total value held per institution.
-
-First Task: Write a Python script loader.py that reads the CSV/Sheet structure, groups holdings by ticker, and calculates the total portfolio value and the percentage weight of each ticker.
 
 🔒 Security Implementation Logic
 To meet your "top-most" security concern, instruct your agent to implement the following specific patterns:
