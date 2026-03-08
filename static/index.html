@@ -578,14 +578,19 @@
 
   // ── Formatters ────────────────────────────────────────────────
   function fmtDollar(v) {
+    if (v == null) return '—';
     if (v >= 1_000_000) return '$' + (v / 1_000_000).toFixed(2) + 'M';
     if (v >= 1_000)     return '$' + (v / 1_000).toFixed(1) + 'K';
     return '$' + v.toFixed(2);
   }
   function fmtDollarFull(v) {
+    if (v == null) return '—';
     return '$' + v.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2});
   }
-  function fmtPct(v) { return v.toFixed(2) + '%'; }
+  function fmtPct(v) {
+    if (v == null) return '—';
+    return v.toFixed(2) + '%';
+  }
   function fmtMktCap(v) {
     if (!v) return '—';
     if (v >= 1e12) return '$' + (v / 1e12).toFixed(2) + 'T';
@@ -869,7 +874,9 @@
 
     // Portfolio Efficiency Score (100 - (WER * 10000) capped at 0-100)
     // Benchmark: 0.10% (10 bps) = 90 score, 0.50% (50 bps) = 50 score
-    const werPct = risk.wer * 100;
+    const wer = risk.wer || 0;
+    const totalCost = risk.total_annual_cost || 0;
+    const werPct = wer * 100;
     const efficiencyScore = Math.max(0, Math.min(100, 100 - (werPct * 100)));
     let scoreColor = 'var(--accent-teal)';
     if (efficiencyScore < 70) scoreColor = 'var(--accent-amber)';
@@ -878,7 +885,7 @@
     const trueExposures = risk.true_exposure.map(f => {
       const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
       const ticker = tickerLink(f.ticker);
-      const breakdown = f.indirect > 0 
+      const breakdown = (f.indirect || 0) > 0 
         ? `<div style="font-size:11px; color:var(--text-muted)">Dir: ${fmtDollar(f.direct)} · Ind: ${fmtDollar(f.indirect)}</div>`
         : '';
       return `
@@ -903,8 +910,8 @@
           <div class="hero-value" style="color:${scoreColor}">${efficiencyScore.toFixed(0)}</div>
           <div class="hero-sub">Efficiency Score</div>
           <div style="margin-top:1rem; font-size:13px; color:var(--text-secondary)">
-            Weighted Expense Ratio: <strong>${(risk.wer * 100).toFixed(3)}%</strong><br>
-            Total Annual Fund Costs: <strong>${fmtDollar(risk.total_annual_cost)}</strong>
+            Weighted Expense Ratio: <strong>${(wer * 100).toFixed(3)}%</strong><br>
+            Total Annual Fund Costs: <strong>${fmtDollar(totalCost)}</strong>
           </div>
         </div>
         <div class="card">
