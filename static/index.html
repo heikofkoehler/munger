@@ -389,6 +389,11 @@
       color: var(--text-muted);
       margin-top: 0.25rem;
     }
+    .bucket-gain {
+      font-size: 14px;
+      font-weight: 600;
+      margin-top: 0.35rem;
+    }
 
     .tax-bucket-card { margin-bottom: 1.5rem; }
     .tax-account-row {
@@ -1013,35 +1018,66 @@
   }
 
   // ── Accounts renderer ─────────────────────────────────────────
+  function _bucketGainInfo(b) {
+    let basis = 0, hasBasis = false;
+    for (const acct of b.accounts)
+      for (const h of acct.holdings)
+        if (h.cost_basis > 0) { basis += h.cost_basis; hasBasis = true; }
+    return hasBasis ? { basis, gain: b.value - basis } : null;
+  }
+
+  function _gainSpan(gain, style = '') {
+    const c = gain >= 0 ? 'var(--accent-teal)' : 'var(--accent-red)';
+    return `<span style="color:${c};${style}">${gain >= 0 ? '+' : ''}${fmtDollar(gain)}</span>`;
+  }
+
   function renderAccounts(data) {
     const buckets = data.buckets;
     const total = data.total_value;
 
-    // Hero grid
+    // Hero grid — include unrealized gain per bucket
     const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Exempt (Roth)'];
     const heroCards = heroKeys.map(label => {
       const b = buckets[label];
       const val = b ? b.value : 0;
       const pct = b ? b.weight_pct : 0;
+      const bg = b ? _bucketGainInfo(b) : null;
+      const gainHtml = bg
+        ? `<div class="bucket-gain">${_gainSpan(bg.gain)}</div>`
+        : '';
       return `<div class="card bucket-hero-card">
         <div class="bucket-label">${label}</div>
         <div class="bucket-value">${fmtDollar(val)}</div>
         <div class="bucket-pct">${fmtNum(pct)}% of portfolio</div>
+        ${gainHtml}
       </div>`;
     }).join('');
 
     // Per-bucket account cards — account names are clickable links
     const bucketCards = Object.entries(buckets).map(([label, b]) => {
+      const bg = _bucketGainInfo(b);
+      const bucketGainHtml = bg
+        ? `&nbsp;·&nbsp; ${_gainSpan(bg.gain, 'font-weight:600')}`
+        : '';
+
       const accountRows = b.accounts.map(acct => {
         const barPct = total > 0 ? (acct.value / total * 100) : 0;
         const safeName = acct.account_name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+        const acctBasis = acct.holdings.reduce((s, h) => s + (h.cost_basis || 0), 0);
+        const acctHasBasis = acct.holdings.some(h => h.cost_basis > 0);
+        const acctGainHtml = acctHasBasis
+          ? `<div style="font-size:11px;text-align:right;margin-top:2px">${_gainSpan(acct.value - acctBasis, 'font-size:11px')}</div>`
+          : '';
         return `<div class="tax-account-row">
           <div class="tax-account-header">
             <div>
               <span class="account-link" data-account="${safeName}">${acct.account_name}</span>
               <span class="tax-account-inst"> · ${acct.institution_name}</span>
             </div>
-            <div class="tax-account-val">${fmtDollar(acct.value)}</div>
+            <div>
+              <div class="tax-account-val">${fmtDollar(acct.value)}</div>
+              ${acctGainHtml}
+            </div>
           </div>
           <div class="tax-bar-wrap">
             <div class="tax-bar" style="width:${Math.min(barPct, 100)}%"></div>
@@ -1050,14 +1086,13 @@
       }).join('');
 
       return `<div class="card tax-bucket-card">
-        <div class="card-title">${label} &nbsp;·&nbsp; ${fmtDollar(b.value)} (${fmtNum(b.weight_pct)}%)</div>
+        <div class="card-title">${label} &nbsp;·&nbsp; ${fmtDollar(b.value)} (${fmtNum(b.weight_pct)}%)${bucketGainHtml}</div>
         ${accountRows}
       </div>`;
     }).join('');
 
     document.getElementById('accounts-content').innerHTML = `
       <div class="grid-3">${heroCards}</div>
-      <p class="tax-note">No cost basis — showing current market value only</p>
       ${bucketCards}`;
 
     document.querySelectorAll('#accounts-content .account-link').forEach(el => {
