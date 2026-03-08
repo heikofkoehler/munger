@@ -300,7 +300,10 @@ def get_fund_details(ticker: str) -> dict:
     try:
         t = yf.Ticker(ticker)
         info = t.info
-        expense_ratio = info.get("netExpenseRatio") or info.get("expenseRatio")
+        raw_ratio = info.get("netExpenseRatio") or info.get("expenseRatio")
+        # yfinance returns these as percentages (e.g. 0.03 for 0.03%), 
+        # so divide by 100 for decimal representation (0.0003)
+        expense_ratio = float(raw_ratio) / 100 if raw_ratio is not None else None
 
         holdings = []
         if hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
