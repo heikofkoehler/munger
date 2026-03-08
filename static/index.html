@@ -1019,11 +1019,18 @@
 
   // ── Accounts renderer ─────────────────────────────────────────
   function _bucketGainInfo(b) {
-    let basis = 0, hasBasis = false;
+    // Only include holdings where cost_basis is known (not null).
+    // Positions with null basis (e.g. equity awards) are excluded to avoid
+    // counting their full value as gain.
+    let gain = 0, basis = 0, hasBasis = false;
     for (const acct of b.accounts)
       for (const h of acct.holdings)
-        if (h.cost_basis > 0) { basis += h.cost_basis; hasBasis = true; }
-    return hasBasis ? { basis, gain: b.value - basis } : null;
+        if (h.cost_basis != null) {
+          basis += h.cost_basis;
+          gain += h.value - h.cost_basis;
+          hasBasis = true;
+        }
+    return hasBasis ? { basis, gain } : null;
   }
 
   function _gainSpan(gain, style = '') {
@@ -1063,10 +1070,10 @@
       const accountRows = b.accounts.map(acct => {
         const barPct = total > 0 ? (acct.value / total * 100) : 0;
         const safeName = acct.account_name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
-        const acctBasis = acct.holdings.reduce((s, h) => s + (h.cost_basis || 0), 0);
-        const acctHasBasis = acct.holdings.some(h => h.cost_basis > 0);
+        const acctHasBasis = acct.holdings.some(h => h.cost_basis != null);
+        const acctGain = acct.holdings.reduce((s, h) => h.cost_basis != null ? s + (h.value - h.cost_basis) : s, 0);
         const acctGainHtml = acctHasBasis
-          ? `<div style="font-size:11px;text-align:right;margin-top:2px">${_gainSpan(acct.value - acctBasis, 'font-size:11px')}</div>`
+          ? `<div style="font-size:11px;text-align:right;margin-top:2px">${_gainSpan(acctGain, 'font-size:11px')}</div>`
           : '';
         return `<div class="tax-account-row">
           <div class="tax-account-header">
