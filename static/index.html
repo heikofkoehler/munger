@@ -590,6 +590,7 @@
         _taxData    || fetch('/api/tax').then(r => r.json()),
       ]);
       _marketData = market;
+      for (const p of _marketData) { if (p.ticker && p.exchange) _exchangeMap[p.ticker] = YF_TO_GF[p.exchange] || p.exchange; }
       _taxData = tax;
       renderDividends(_marketData, _taxData);
     } catch (err) {
@@ -608,6 +609,7 @@
         _taxData    || fetch('/api/tax').then(r => r.json()),
       ]);
       _marketData = market;
+      for (const p of _marketData) { if (p.ticker && p.exchange) _exchangeMap[p.ticker] = YF_TO_GF[p.exchange] || p.exchange; }
       _taxData = tax;
       renderEarnings(_marketData, _taxData);
     } catch (err) {
@@ -726,9 +728,23 @@
 
   // ── Ticker link ───────────────────────────────────────────────
   const SKIP_LINK = new Set(['FCASH', 'CUR:USD', '']);
-  function tickerLink(ticker) {
+  // yfinance exchange code → Google Finance exchange suffix
+  const YF_TO_GF = {
+    'NMS': 'NASDAQ', 'NGM': 'NASDAQ', 'NCM': 'NASDAQ',
+    'NasdaqGS': 'NASDAQ', 'NasdaqGM': 'NASDAQ', 'NasdaqCM': 'NASDAQ',
+    'NYQ': 'NYSE', 'NYSE': 'NYSE',
+    'PCX': 'NYSEARCA', 'NYSEARCA': 'NYSEARCA',
+    'ASE': 'NYSEAMERICAN', 'AMEX': 'NYSEAMERICAN',
+    'BTS': 'NYSEARCA',
+  };
+  let _exchangeMap = {};  // ticker → GF exchange, populated from market data
+
+  function tickerLink(ticker, exchange) {
     if (!ticker || SKIP_LINK.has(ticker)) return ticker || '—';
-    const url = `https://www.google.com/finance/quote/${encodeURIComponent(ticker)}`;
+    const gfEx = exchange ? (YF_TO_GF[exchange] || exchange)
+                          : (_exchangeMap[ticker] || '');
+    const symbol = gfEx ? `${ticker}:${gfEx}` : ticker;
+    const url = `https://www.google.com/finance/quote/${symbol}`;
     return `<a class="ticker-link" href="${url}" target="_blank" rel="noopener noreferrer">${ticker}</a>`;
   }
 
@@ -1023,6 +1039,7 @@
     btn.disabled = true;
     _marketData = null;
     _taxData = null;
+    _exchangeMap = {};
     try {
       const data = await fetch('/api/refresh').then(r => r.json());
       _summaryData = data;
