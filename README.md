@@ -1,6 +1,6 @@
 # Munger
 
-A local-first, high-security portfolio analysis dashboard. Reads holdings from Google Sheets (or a local CSV), deduplicates positions across accounts, and serves a web UI with four analysis views.
+A local-first, high-security portfolio analysis dashboard. Reads holdings from Monarch Money (recommended), Google Sheets, or a local CSV, deduplicates positions across accounts, and serves a web UI with four analysis views.
 
 ## Features
 
@@ -19,7 +19,7 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from G
 Run the FastAPI backend and open `http://localhost:8000`:
 
 ```bash
-CSV_PATH=portfolio_holdings.csv uvicorn main:app --reload
+uvicorn main:app --reload
 ```
 
 ### Portfolio tab
@@ -32,7 +32,7 @@ Projected annual income hero, split by tax bucket. Per-bucket tables show Ticker
 Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Sector · Trailing EPS · Trailing P/E · Forward P/E · Market Cap. Sortable columns.
 
 ### Accounts tab
-Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars. Click any account name to see a full holdings detail page (Ticker · Name · Value · Type) with a back button to return to the overview.
+Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars. Click any account name to see a full holdings detail page (Ticker · Name · Qty · Price/Share · Value · Cost Basis · Gain/Loss · Type) with a back button to return to the overview.
 
 Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
 
