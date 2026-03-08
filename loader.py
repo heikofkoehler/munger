@@ -369,6 +369,7 @@ def calculate_tax_buckets(df_raw) -> dict:
                 {
                     "ticker": str(row["ticker"]),
                     "security_name": str(row["security_name"]),
+                    "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
                     "value": round(float(row["value"]), 2),
                     "type_display": str(row["type_display"]),
                 }
