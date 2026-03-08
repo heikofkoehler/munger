@@ -560,8 +560,10 @@
       panel.classList.toggle('active', panel.id === `panel-${name}`);
     });
 
-    if (name === 'dividends' || name === 'earnings') {
-      loadMarket(name);
+    if (name === 'dividends') {
+      loadMarket('dividends');
+    } else if (name === 'earnings') {
+      loadEarnings();
     } else if (name === 'tax') {
       loadTax();
     }
@@ -571,23 +573,34 @@
     return `<div class="spinner-wrap"><div class="spinner"></div><div>${msg}</div></div>`;
   }
 
-  // ── Market data lazy load ─────────────────────────────────────
+  // ── Market data lazy load (dividends only) ───────────────────
   async function loadMarket(tab) {
-    if (_marketData) {
-      if (tab === 'dividends') renderDividends(_marketData);
-      else renderEarnings(_marketData);
-      return;
-    }
-    const el = tab === 'dividends'
-      ? document.getElementById('div-content')
-      : document.getElementById('earn-content');
-    el.innerHTML = spinner();
+    if (_marketData) { renderDividends(_marketData); return; }
+    document.getElementById('div-content').innerHTML = spinner();
     try {
       _marketData = await fetch('/api/market').then(r => r.json());
       renderDividends(_marketData);
-      renderEarnings(_marketData);
     } catch (err) {
-      el.innerHTML = `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load market data: ${err.message}</div>`;
+      document.getElementById('div-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load market data: ${err.message}</div>`;
+    }
+  }
+
+  // ── Earnings lazy load (needs market + tax) ───────────────────
+  async function loadEarnings() {
+    if (_marketData && _taxData) { renderEarnings(_marketData, _taxData); return; }
+    document.getElementById('earn-content').innerHTML = spinner();
+    try {
+      const [market, tax] = await Promise.all([
+        _marketData || fetch('/api/market').then(r => r.json()),
+        _taxData    || fetch('/api/tax').then(r => r.json()),
+      ]);
+      _marketData = market;
+      _taxData = tax;
+      renderEarnings(_marketData, _taxData);
+    } catch (err) {
+      document.getElementById('earn-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load: ${err.message}</div>`;
     }
   }
 
@@ -817,88 +830,103 @@
   }
 
   // ── Earnings renderer ─────────────────────────────────────────
-  function renderEarnings(positions) {
-    // Projected income (reuse same logic as dividends)
+  function renderEarnings(marketPositions, taxData) {
+    // ticker → market data map
+    const mktMap = {};
+    for (const p of marketPositions) { if (p.ticker) mktMap[p.ticker] = p; }
+
+    // Overall weighted P/E
+    let wPE = 0, wTot = 0;
+    for (const p of marketPositions) {
+      if ((p.type_display === 'Stock' || p.type_display === 'ETF')
+          && p.trailing_pe && p.trailing_pe > 0) {
+        wPE += p.trailing_pe * p.value; wTot += p.value;
+      }
+    }
+    const avgPE = wTot > 0 ? wPE / wTot : null;
+
+    // Overall projected income
     let totalIncome = 0;
-    for (const p of positions) {
+    for (const p of marketPositions) {
       if (p.dividend_rate && p.quantity) totalIncome += p.quantity * p.dividend_rate;
       else if (p.dividend_yield && p.value) totalIncome += p.value * p.dividend_yield / 100;
     }
 
-    // Weighted-avg trailing P/E (by value, only trailing_pe > 0, Stock/ETF only)
-    let weightedPE = 0, totalWeight = 0;
-    for (const p of positions) {
-      if ((p.type_display === 'Stock' || p.type_display === 'ETF')
-          && p.trailing_pe && p.trailing_pe > 0) {
-        weightedPE += p.trailing_pe * p.value;
-        totalWeight += p.value;
+    // One card per tax bucket
+    const sections = Object.entries(taxData.buckets).map(([label, bucket]) => {
+      // Aggregate holdings by ticker across all accounts in this bucket
+      const agg = {};
+      for (const acct of bucket.accounts) {
+        for (const h of acct.holdings) {
+          const key = h.ticker || h.security_name;
+          if (!agg[key]) agg[key] = { ticker: h.ticker, security_name: h.security_name, value: 0 };
+          agg[key].value += h.value;
+        }
       }
-    }
-    const avgPE = totalWeight > 0 ? (weightedPE / totalWeight) : null;
+      const positions = Object.values(agg)
+        .map(h => ({ ...h, ...(h.ticker ? (mktMap[h.ticker] || {}) : {}) }))
+        .sort((a, b) => b.value - a.value);
 
-    const rows = positions
-      .filter(p => p.value >= 1)
-      .sort((a, b) => b.value - a.value);
+      // Bucket weighted P/E
+      let bPE = 0, bTot = 0;
+      for (const p of positions) {
+        if ((p.type_display === 'Stock' || p.type_display === 'ETF')
+            && p.trailing_pe && p.trailing_pe > 0) {
+          bPE += p.trailing_pe * p.value; bTot += p.value;
+        }
+      }
+      const bucketPE = bTot > 0 ? bPE / bTot : null;
+      const peTag = bucketPE != null
+        ? `<span style="color:var(--accent-blue);font-weight:600;font-size:12px">P/E ${fmtNum(bucketPE)}</span>`
+        : '';
 
-    const isCashOrFI = p => p.type_display === 'Cash' || p.type_display === 'Fixed Income';
-
-    const tableRows = rows.map(p => {
-      const ticker = p.ticker || p.security_name.slice(0, 15);
-      if (isCashOrFI(p)) {
+      const rows = positions.map(p => {
+        const ticker = p.ticker || (p.security_name || '').slice(0, 15) || '—';
+        const type = p.type_display || 'Cash';
+        if (type === 'Cash' || type === 'Fixed Income') {
+          return `<tr>
+            <td class="td-ticker">${ticker}</td>
+            <td class="td-name">${p.security_name || '—'}</td>
+            <td class="td-value">${fmtDollar(p.value)}</td>
+            <td class="td-muted">—</td><td class="td-muted">—</td>
+            <td class="td-muted">—</td><td class="td-muted">—</td>
+            <td class="td-muted">—</td>
+          </tr>`;
+        }
         return `<tr>
           <td class="td-ticker">${ticker}</td>
-          <td class="td-name">${p.security_name}</td>
+          <td class="td-name">${p.security_name || '—'}</td>
           <td class="td-value">${fmtDollar(p.value)}</td>
-          <td class="td-muted">—</td>
-          <td class="td-muted">—</td>
-          <td class="td-muted">—</td>
-          <td class="td-muted">—</td>
-          <td class="td-muted">—</td>
+          <td class="td-muted">${p.sector || '—'}</td>
+          <td class="td-num">${fmtNum(p.trailing_eps)}</td>
+          <td class="td-num">${p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—'}</td>
+          <td class="td-num">${p.forward_pe > 0 ? fmtNum(p.forward_pe) : '—'}</td>
+          <td class="td-num">${fmtMktCap(p.market_cap)}</td>
         </tr>`;
-      }
-      const sector = p.sector || '—';
-      const tEps  = fmtNum(p.trailing_eps);
-      const tPE   = p.trailing_pe && p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—';
-      const fPE   = p.forward_pe  && p.forward_pe  > 0 ? fmtNum(p.forward_pe)  : '—';
-      const mCap  = fmtMktCap(p.market_cap);
-      return `<tr>
-        <td class="td-ticker">${ticker}</td>
-        <td class="td-name">${p.security_name}</td>
-        <td class="td-value">${fmtDollar(p.value)}</td>
-        <td class="td-muted">${sector}</td>
-        <td class="td-num">${tEps}</td>
-        <td class="td-num">${tPE}</td>
-        <td class="td-num">${fPE}</td>
-        <td class="td-num">${mCap}</td>
-      </tr>`;
+      }).join('');
+
+      return `<div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+          <span>${label} &nbsp;·&nbsp; ${fmtDollar(bucket.value)} (${fmtNum(bucket.weight_pct)}%)</span>
+          ${peTag}
+        </div>
+        <table>
+          <thead><tr>
+            <th>Ticker</th><th>Name</th><th>Value</th><th>Sector</th>
+            <th>Trailing EPS</th><th>Trailing P/E</th><th>Forward P/E</th><th>Market Cap</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
     }).join('');
 
     document.getElementById('earn-content').innerHTML = `
       <div class="hero">
         <div class="hero-label">Weighted Avg Trailing P/E</div>
         <div class="hero-value" style="color:var(--accent-blue)">${avgPE != null ? fmtNum(avgPE) : '—'}</div>
-        <div class="hero-sub">Weighted by value · Stocks &amp; ETFs only · Excludes negative P/E</div>
+        <div class="hero-sub">Weighted by value · Stocks &amp; ETFs only · Excludes negative P/E &nbsp;·&nbsp; Projected income: ${fmtDollar(totalIncome)}</div>
       </div>
-      <div class="card">
-        <div class="card-title">Earnings Details</div>
-        <table>
-          <thead><tr>
-            <th>Ticker</th>
-            <th>Name</th>
-            <th>Value</th>
-            <th>Sector</th>
-            <th>Trailing EPS</th>
-            <th>Trailing P/E</th>
-            <th>Forward P/E</th>
-            <th>Market Cap</th>
-          </tr></thead>
-          <tbody>${tableRows}</tbody>
-          <tfoot><tr style="border-top:1px solid var(--border)">
-            <td colspan="7" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Projected Annual Income</td>
-            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(totalIncome)}</td>
-          </tr></tfoot>
-        </table>
-      </div>`;
+      ${sections}`;
   }
 
   // ── Tax renderer ──────────────────────────────────────────────
@@ -961,8 +989,10 @@
       _summaryData = data;
       renderDashboard(data);
       // Re-render current tab if it's not portfolio
-      if (_activeTab === 'dividends' || _activeTab === 'earnings') {
-        loadMarket(_activeTab);
+      if (_activeTab === 'dividends') {
+        loadMarket('dividends');
+      } else if (_activeTab === 'earnings') {
+        loadEarnings();
       } else if (_activeTab === 'tax') {
         loadTax();
       }
