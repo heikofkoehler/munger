@@ -1034,11 +1034,11 @@
     const bucketCards = Object.entries(buckets).map(([label, b]) => {
       const accountRows = b.accounts.map(acct => {
         const barPct = total > 0 ? (acct.value / total * 100) : 0;
-        const nameAttr = JSON.stringify(acct.account_name);
+        const safeName = acct.account_name.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
         return `<div class="tax-account-row">
           <div class="tax-account-header">
             <div>
-              <span class="account-link" onclick="showAccountDetail(${nameAttr})">${acct.account_name}</span>
+              <span class="account-link" data-account="${safeName}">${acct.account_name}</span>
               <span class="tax-account-inst"> · ${acct.institution_name}</span>
             </div>
             <div class="tax-account-val">${fmtDollar(acct.value)}</div>
@@ -1059,6 +1059,10 @@
       <div class="grid-3">${heroCards}</div>
       <p class="tax-note">No cost basis — showing current market value only</p>
       ${bucketCards}`;
+
+    document.querySelectorAll('#accounts-content .account-link').forEach(el => {
+      el.addEventListener('click', () => showAccountDetail(el.dataset.account));
+    });
   }
 
   // ── Account detail view ───────────────────────────────────────
