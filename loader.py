@@ -144,6 +144,12 @@ TICKER_ALIASES = {
     "BRKB":  "BRK-B",
 }
 
+# Manual overrides for securities with missing or broken ticker symbols
+TICKER_OVERRIDES = {
+    "UNKNOWN_189993187450742649": "VBTIX", # Vanguard Total Bond Market Index Fund
+    "UNKNOWN_189993188208175994": "VFFSX", # Vanguard 500 Index Fund
+}
+
 
 def normalize_ticker(ticker: str, aggregate_classes: bool = False) -> str:
     """
@@ -155,6 +161,11 @@ def normalize_ticker(ticker: str, aggregate_classes: bool = False) -> str:
     """
     if not ticker or not isinstance(ticker, str):
         return ""
+    
+    # Check manual overrides first
+    if ticker in TICKER_OVERRIDES:
+        ticker = TICKER_OVERRIDES[ticker]
+
     t = ticker.strip().upper()
     # Standardize on Yahoo Finance format (hyphen instead of dot/slash)
     t = t.replace(".", "-").replace("/", "-")
