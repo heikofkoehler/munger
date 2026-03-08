@@ -187,10 +187,10 @@ def normalize_ticker(ticker: str, aggregate_classes: bool = False) -> str:
 
 def deduplicate(df):
     """
-    Deduplicate holdings by security_id (position view).
+    Deduplicate holdings by ticker (position view).
 
-    Sums quantity and value across accounts. Preserves ticker, security_name,
-    type_display from the first occurrence per security_id.
+    Sums quantity and value across accounts. Preserves security_id, security_name,
+    type_display from the first occurrence per ticker.
     """
     import pandas as pd
 
@@ -198,23 +198,24 @@ def deduplicate(df):
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
     
-    # Normalize tickers for consistent display, but DON'T aggregate 
-    # different share classes yet to avoid corrupting quantity/price 
-    # if they have different security_ids.
+    # Normalize tickers for consistent display and merging.
     if "ticker" in df.columns:
         df["ticker"] = df["ticker"].apply(lambda t: normalize_ticker(t, aggregate_classes=False))
 
+    # Identify by ticker. If ticker is empty, use security_id as fallback
+    df["group_id"] = df["ticker"].where(df["ticker"] != "", df["security_id"])
+
     # Metadata to preserve from first occurrence
-    meta = df.groupby("security_id")[["ticker", "security_name", "type_display"]].first()
+    meta = df.groupby("group_id")[["ticker", "security_id", "security_name", "type_display"]].first()
 
     # Summed numeric columns
     numeric_cols = ["quantity", "value"]
     if "cost_basis" in df.columns:
         df["cost_basis"] = pd.to_numeric(df["cost_basis"], errors="coerce").fillna(0)
         numeric_cols.append("cost_basis")
-    numeric = df.groupby("security_id")[numeric_cols].sum()
+    numeric = df.groupby("group_id")[numeric_cols].sum()
 
-    result = meta.join(numeric).reset_index()
+    result = meta.join(numeric).reset_index(drop=True)
     return result
 
 
