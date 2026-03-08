@@ -1,15 +1,39 @@
 # Munger
 
-A local-first, high-security portfolio analysis tool. Reads holdings from Google Sheets (or a local CSV), deduplicates positions across accounts, normalizes asset classes, and flags concentration risk.
+A local-first, high-security portfolio analysis dashboard. Reads holdings from Google Sheets (or a local CSV), deduplicates positions across accounts, and serves a web UI with four analysis views.
 
 ## Features
 
 - **Google Sheets integration** — OAuth2 Authorization Code Flow, no service accounts
 - **CSV fallback** — drop in a local file for dev/offline use
-- **Position deduplication** — merges the same security held across multiple accounts
+- **Position deduplication** — merges the same security held across multiple accounts by `security_id`
 - **Asset class normalization** — maps cash and fixed income tickers to canonical types
 - **Concentration risk flags** — configurable per-ticker thresholds
+- **Market data enrichment** — dividend yield/rate, EPS, P/E, sector, market cap via yfinance (ticker symbols only leave the machine)
+- **Tax bucket classification** — accounts classified as Taxable / Tax-Deferred / Tax-Exempt by name pattern
 - **Local-first** — all financial data stays on your machine after fetch
+
+## Dashboard
+
+Run the FastAPI backend and open `http://localhost:8000`:
+
+```bash
+CSV_PATH=portfolio_holdings.csv uvicorn main:app --reload
+```
+
+### Portfolio tab
+Net worth hero, allocation bar chart (color-coded by asset class), concentration risk flags, institutions breakdown, full positions table.
+
+### Dividends tab
+Projected annual income hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Annual $/Share · Yield · Projected Income. Sortable columns.
+
+### Earnings tab
+Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Sector · Trailing EPS · Trailing P/E · Forward P/E · Market Cap. Sortable columns.
+
+### Tax tab
+Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars.
+
+Ticker symbols link to Yahoo Finance (Stock and ETF only).
 
 ## Setup
 
@@ -19,39 +43,7 @@ cp .env.example .env
 # edit .env with your SHEET_ID or CSV_PATH
 ```
 
-For Google Sheets, download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window will open on first run to authorize access; the token is cached locally in `token.json`.
-
-## Usage
-
-```bash
-# Local CSV (dev)
-CSV_PATH=portfolio.csv python loader.py
-
-# Google Sheets (prod)
-SHEET_ID=your_sheet_id python loader.py
-```
-
-Example output:
-
-```
-Total Portfolio Value: $10,300.00
-
-Asset Class    Weight
--------------  --------
-ETF            61.16%
-Fixed Income   25.24%
-Cash           10.19%
-Stock           3.40%
-
-Ticker    Name                           Value      Weight    Type
---------  -----------------------------  ---------  --------  ------------
-VOO       Vanguard S&P 500 ETF           $6,300.00  61.16%    ETF
-VCSH      Vanguard Short-Term Corp Bond  $1,500.00  14.56%    Fixed Income
-...
-
-CONCENTRATION RISK FLAGS:
-  VOO: 61.16% (threshold: 20.0%)
-```
+For Google Sheets, download your OAuth client secret from Google Cloud Console and save it as `credentials.json` (or set `GOOGLE_CREDENTIALS_PATH`). A browser window opens on first run to authorize; the token is cached locally in `token.json`.
 
 ## Google Sheet Format
 
@@ -73,5 +65,6 @@ The sheet must have these columns:
 
 - Secrets in `.env` — never committed
 - `.gitignore` enforced at startup (`*.csv`, `*.json`, `*.env`, `*.db`)
+- Only ticker symbols leave the machine (yfinance market data fetch)
 - No analytics or telemetry
 - All logging to stdout only
