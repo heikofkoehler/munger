@@ -181,6 +181,15 @@
     }
     .grid-3 .card { margin-bottom: 0; }
 
+    /* ── 4-column grid ──────────────────────────────────────── */
+    .grid-4 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .grid-4 .card { margin-bottom: 0; }
+
     /* ── Concentration flags ────────────────────────────────── */
     .flags-empty {
       color: var(--text-muted);
@@ -924,29 +933,18 @@
     }).join('');
 
     panel.innerHTML = `
-      <div class="grid-2">
-        <div class="card" style="text-align:center">
-          <div class="card-title">Portfolio Efficiency</div>
-          <div class="hero-value" style="color:${scoreColor}">${efficiencyScore.toFixed(0)}</div>
-          <div class="hero-sub">Efficiency Score</div>
-          <div style="margin-top:1rem; font-size:13px; color:var(--text-secondary)">
-            Weighted Expense Ratio: <strong>${(wer * 100).toFixed(3)}%</strong><br>
-            Total Annual Fund Costs: <strong>${fmtDollar(totalCost)}</strong>
-          </div>
+      <div class="card">
+        <div class="card-title">Concentration Heatmap</div>
+        <div style="margin-top: 1rem; height: 120px; display: flex; align-items: flex-end; gap: 4px;">
+          ${risk.true_exposure.slice(0, 15).map(f => {
+            const h = Math.max(5, Math.min(100, f.weight_pct * 5)); // scale for visual, capped at 100%
+            const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
+            return `<div style="flex:1; background:${color}; height:${h}%; border-radius: 2px 2px 0 0;" title="${f.ticker}: ${fmtPct(f.weight_pct)}"></div>`;
+          }).join('')}
         </div>
-        <div class="card">
-          <div class="card-title">Concentration Heatmap</div>
-          <div style="margin-top: 1rem; height: 120px; display: flex; align-items: flex-end; gap: 4px;">
-            ${risk.true_exposure.slice(0, 15).map(f => {
-              const h = Math.max(5, Math.min(100, f.weight_pct * 5)); // scale for visual, capped at 100%
-              const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
-              return `<div style="flex:1; background:${color}; height:${h}%; border-radius: 2px 2px 0 0;" title="${f.ticker}: ${fmtPct(f.weight_pct)}"></div>`;
-            }).join('')}
-          </div>
-          <div style="display:flex; justify-content:space-between; margin-top:0.5rem; font-size:11px; color:var(--text-muted)">
-            <span>Highest Exposure</span>
-            <span>Top 15 Assets</span>
-          </div>
+        <div style="display:flex; justify-content:space-between; margin-top:0.5rem; font-size:11px; color:var(--text-muted)">
+          <span>Highest Exposure</span>
+          <span>Top 15 Assets</span>
         </div>
       </div>
 
@@ -996,8 +994,20 @@
       </tr>`;
     }).join('');
 
+    const wer = data.weighted_expense_ratio || 0;
+    const werPct = wer * 100;
+    const efficiencyScore = Math.max(0, Math.min(100, 100 - (werPct * 100)));
+    let scoreColor = 'var(--accent-teal)';
+    if (efficiencyScore < 70) scoreColor = 'var(--accent-amber)';
+    if (efficiencyScore < 40) scoreColor = 'var(--accent-red)';
+
     panel.innerHTML = `
-      <div class="grid-3">
+      <div class="grid-4">
+        <div class="card bucket-hero-card" style="text-align:center">
+          <div class="bucket-label">Efficiency Score</div>
+          <div class="bucket-value" style="color:${scoreColor}">${efficiencyScore.toFixed(0)}</div>
+          <div class="bucket-pct">Out of 100</div>
+        </div>
         <div class="card bucket-hero-card">
           <div class="bucket-label">Annual Fee Bill</div>
           <div class="bucket-value" style="color:var(--accent-red)">${fmtDollar(data.total_annual_cost)}</div>
