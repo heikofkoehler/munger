@@ -6,7 +6,7 @@ Run with: uvicorn main:app --reload
 """
 
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from loader import (
@@ -49,7 +49,7 @@ _build_cache()
 
 @app.get("/", include_in_schema=False)
 def root():
-    return RedirectResponse("/static/index.html")
+    return FileResponse("static/index.html", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/summary")

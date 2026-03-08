@@ -840,7 +840,7 @@
       const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollar(bucketIncome)}/yr</span>`;
 
       const rows = positions.map(p => {
-        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.exchange);
         const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
         const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
         const inc = p._income != null ? fmtDollar(p._income) : '—';
@@ -935,7 +935,7 @@
         : '';
 
       const rows = positions.map(p => {
-        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
+        const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15), p.exchange);
         const type = p.type_display || 'Cash';
         if (type === 'Cash' || type === 'Fixed Income') {
           return `<tr>
