@@ -701,22 +701,29 @@ def calculate_tax_buckets(df_raw) -> dict:
         institution = str(acct_df["institution_name"].iloc[0]) if len(acct_df) else ""
 
         has_cost_basis = "cost_basis" in acct_df.columns
-        holdings = sorted(
-            [
-                {
-                    "ticker": normalize_ticker(str(row["ticker"]) or f"UNKNOWN_{row['security_id']}"),
-                    "security_name": str(row["security_name"]),
-                    "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
-                    "value": round(float(row["value"]), 2),
-                    "cost_basis": round(float(cb), 2) if has_cost_basis and not pd.isna(cb := pd.to_numeric(row["cost_basis"], errors="coerce")) else None,
-                    "type_display": str(row["type_display"]),
-                }
-                for _, row in acct_df.iterrows()
-                if float(row["value"]) >= 0.01
-            ],
-            key=lambda h: h["value"],
-            reverse=True,
-        )
+        holdings = []
+        for _, row in acct_df.iterrows():
+            if float(row["value"]) < 0.01:
+                continue
+            
+            ticker = normalize_ticker(str(row["ticker"]) or f"UNKNOWN_{row['security_id']}")
+            
+            # Apply asset class overrides consistently
+            type_display = str(row["type_display"])
+            if ticker in CASH_TICKERS: type_display = "Cash"
+            elif ticker in FIXED_INCOME_TICKERS: type_display = "Fixed Income"
+            if ticker in MUTUAL_FUND_TICKERS: type_display = "Mutual Fund"
+
+            holdings.append({
+                "ticker": ticker,
+                "security_name": str(row["security_name"]),
+                "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
+                "value": round(float(row["value"]), 2),
+                "cost_basis": round(float(cb), 2) if has_cost_basis and not pd.isna(cb := pd.to_numeric(row["cost_basis"], errors="coerce")) else None,
+                "type_display": type_display,
+            })
+        
+        holdings.sort(key=lambda h: h["value"], reverse=True)
 
         account_entry = {
             "account_name": str(account_name),
