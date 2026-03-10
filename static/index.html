@@ -1233,7 +1233,13 @@
     // Overall weighted P/E and Total Earnings
     let wPE = 0, wTot = 0, totalPortfolioEarnings = 0;
     for (const p of marketPositions) {
-      const earnings = (p.trailing_pe > 0) ? (p.value / p.trailing_pe) : 0;
+      let earnings = 0;
+      if (p.trailing_pe > 0) {
+        earnings = p.value / p.trailing_pe;
+      } else if (p.dividend_yield > 0) {
+        // For Fixed Income/ETFs without PE, yield is effectively the 'earnings'
+        earnings = p.value * p.dividend_yield / 100;
+      }
       totalPortfolioEarnings += earnings;
 
       if ((p.type_display === 'Stock' || p.type_display === 'ETF')
@@ -1266,7 +1272,12 @@
       const positions = Object.values(agg)
         .map(h => {
           const mkt = h.ticker ? (mktMap[h.ticker] || {}) : {};
-          const earnings = (mkt.trailing_pe > 0) ? (h.value / mkt.trailing_pe) : 0;
+          let earnings = 0;
+          if (mkt.trailing_pe > 0) {
+            earnings = h.value / mkt.trailing_pe;
+          } else if (mkt.dividend_yield > 0) {
+            earnings = h.value * mkt.dividend_yield / 100;
+          }
           bucketEarnings += earnings;
           return { ...mkt, ...h, _earnings: earnings };
         })
@@ -1290,19 +1301,21 @@
         const type = p.type_display || 'Cash';
         const color = colorFor(type);
         const typeBadge = `<span class="type-badge" style="background:${color}22;color:${color}">${type}</span>`;
-        if (type === 'Cash' || type === 'Fixed Income') {
+        
+        if (type === 'Cash') {
           return `<tr>
             <td class="td-ticker">${ticker}</td>
             <td class="td-name">${p.security_name || '—'}</td>
             <td class="td-value">${fmtDollar(p.value)}</td>
             <td>${typeBadge}</td>
-            <td class="td-muted">${p.sector || '—'}</td>
+            <td class="td-muted">—</td>
             <td class="td-num">—</td>
             <td class="td-num">—</td>
             <td class="td-num" style="color:var(--accent-blue); font-weight:600">${fmtDollar(0)}</td>
             <td class="td-num">${fmtMktCap(p.market_cap)}</td>
           </tr>`;
         }
+        
         return `<tr>
           <td class="td-ticker">${ticker}</td>
           <td class="td-name">${p.security_name || '—'}</td>
