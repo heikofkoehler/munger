@@ -1230,9 +1230,12 @@
     const mktMap = {};
     for (const p of marketPositions) { if (p.ticker) mktMap[p.ticker] = p; }
 
-    // Overall weighted P/E
-    let wPE = 0, wTot = 0;
+    // Overall weighted P/E and Total Earnings
+    let wPE = 0, wTot = 0, totalPortfolioEarnings = 0;
     for (const p of marketPositions) {
+      const earnings = (p.trailing_pe > 0) ? (p.value / p.trailing_pe) : 0;
+      totalPortfolioEarnings += earnings;
+
       if ((p.type_display === 'Stock' || p.type_display === 'ETF')
           && p.trailing_pe && p.trailing_pe > 0) {
         wPE += p.trailing_pe * p.value; wTot += p.value;
@@ -1241,10 +1244,10 @@
     const avgPE = wTot > 0 ? wPE / wTot : null;
 
     // Overall projected income
-    let totalIncome = 0;
+    let totalDividendIncome = 0;
     for (const p of marketPositions) {
-      if (p.dividend_rate && p.quantity) totalIncome += p.quantity * p.dividend_rate;
-      else if (p.dividend_yield && p.value) totalIncome += p.value * p.dividend_yield / 100;
+      if (p.dividend_rate && p.quantity) totalDividendIncome += p.quantity * p.dividend_rate;
+      else if (p.dividend_yield && p.value) totalDividendIncome += p.value * p.dividend_yield / 100;
     }
 
     // One card per tax bucket
@@ -1258,8 +1261,15 @@
           agg[key].value += h.value;
         }
       }
+      
+      let bucketEarnings = 0;
       const positions = Object.values(agg)
-        .map(h => ({ ...(h.ticker ? (mktMap[h.ticker] || {}) : {}), ...h }))
+        .map(h => {
+          const mkt = h.ticker ? (mktMap[h.ticker] || {}) : {};
+          const earnings = (mkt.trailing_pe > 0) ? (h.value / mkt.trailing_pe) : 0;
+          bucketEarnings += earnings;
+          return { ...mkt, ...h, _earnings: earnings };
+        })
         .sort((a, b) => b.value - a.value);
 
       // Bucket weighted P/E
@@ -1272,7 +1282,7 @@
       }
       const bucketPE = bTot > 0 ? bPE / bTot : null;
       const peTag = bucketPE != null
-        ? `<span style="color:var(--accent-blue);font-weight:600;font-size:12px">P/E ${fmtNum(bucketPE)}</span>`
+        ? `<span style="color:var(--accent-blue);font-weight:600;font-size:12px">P/E ${fmtNum(bucketPE)} &nbsp;·&nbsp; ${fmtDollar(bucketEarnings)} earnings/yr</span>`
         : '';
 
       const rows = positions.map(p => {
@@ -1286,9 +1296,11 @@
             <td class="td-name">${p.security_name || '—'}</td>
             <td class="td-value">${fmtDollar(p.value)}</td>
             <td>${typeBadge}</td>
-            <td class="td-muted">—</td><td class="td-muted">—</td>
-            <td class="td-muted">—</td><td class="td-muted">—</td>
-            <td class="td-muted">—</td>
+            <td class="td-muted">${p.sector || '—'}</td>
+            <td class="td-num">—</td>
+            <td class="td-num">—</td>
+            <td class="td-num" style="color:var(--accent-blue); font-weight:600">${fmtDollar(0)}</td>
+            <td class="td-num">${fmtMktCap(p.market_cap)}</td>
           </tr>`;
         }
         return `<tr>
@@ -1297,9 +1309,9 @@
           <td class="td-value">${fmtDollar(p.value)}</td>
           <td>${typeBadge}</td>
           <td class="td-muted">${p.sector || '—'}</td>
-          <td class="td-num">${fmtNum(p.trailing_eps)}</td>
           <td class="td-num">${p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—'}</td>
           <td class="td-num">${p.forward_pe > 0 ? fmtNum(p.forward_pe) : '—'}</td>
+          <td class="td-num" style="color:var(--accent-blue); font-weight:600">${p._earnings > 0 ? fmtDollar(p._earnings) : '—'}</td>
           <td class="td-num">${fmtMktCap(p.market_cap)}</td>
         </tr>`;
       }).join('');
@@ -1312,18 +1324,23 @@
         <table>
           <thead><tr>
             <th>Ticker</th><th>Name</th><th>Value</th><th>Type</th><th>Sector</th>
-            <th>Trailing EPS</th><th>Trailing P/E</th><th>Forward P/E</th><th>Market Cap</th>
+            <th>Trailing P/E</th><th>Forward P/E</th><th>Annual Earnings</th><th>Market Cap</th>
           </tr></thead>
           <tbody>${rows}</tbody>
+          <tfoot><tr style="border-top:1px solid var(--border)">
+            <td colspan="7" style="padding:0.7rem 0;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">Bucket Total Earnings</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-blue);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(bucketEarnings)}</td>
+            <td></td>
+          </tr></tfoot>
         </table>
       </div>`;
     }).join('');
 
     document.getElementById('earn-content').innerHTML = `
       <div class="hero">
-        <div class="hero-label">Weighted Avg Trailing P/E</div>
-        <div class="hero-value" style="color:var(--accent-blue)">${avgPE != null ? fmtNum(avgPE) : '—'}</div>
-        <div class="hero-sub">Weighted by value · Stocks &amp; ETFs only · Excludes negative P/E &nbsp;·&nbsp; Projected income: ${fmtDollar(totalIncome)}</div>
+        <div class="hero-label">Total Portfolio Annual Earnings</div>
+        <div class="hero-value" style="color:var(--accent-blue)">${fmtDollar(totalPortfolioEarnings)}</div>
+        <div class="hero-sub">Weighted Avg P/E: ${avgPE != null ? fmtNum(avgPE) : '—'} &nbsp;·&nbsp; Projected Dividends: ${fmtDollar(totalDividendIncome)}</div>
       </div>
       ${sections}`;
     document.querySelectorAll('#earn-content table').forEach(makeSortable);
