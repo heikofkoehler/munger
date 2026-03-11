@@ -239,8 +239,7 @@ def deduplicate(df):
 # ---------------------------------------------------------------------------
 
 CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
-FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
-MUTUAL_FUND_TICKERS = {"VBTIX", "VFFSX"}
+FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX", "VFFSX"}
 
 
 def normalize_asset_class(df):
@@ -248,7 +247,6 @@ def normalize_asset_class(df):
     df = df.copy()
     df.loc[df["ticker"].isin(CASH_TICKERS), "type_display"] = "Cash"
     df.loc[df["ticker"].isin(FIXED_INCOME_TICKERS), "type_display"] = "Fixed Income"
-    df.loc[df["ticker"].isin(MUTUAL_FUND_TICKERS), "type_display"] = "Mutual Fund"
     return df
 
 
@@ -616,12 +614,12 @@ def calculate_sector_allocation(positions: list) -> dict:
         
         # Default to "Other/Unknown" if no sector found
         sector = "Other/Unknown"
-        if ticker and ticker in _market_cache:
-            sector = _market_cache[ticker].get("sector") or "Other/Unknown"
+        if p.get("type_display") == "Fixed Income":
+            sector = "Fixed Income"
         elif p.get("type_display") == "Cash":
             sector = "Cash"
-        elif p.get("type_display") == "Fixed Income":
-            sector = "Fixed Income"
+        elif ticker and ticker in _market_cache:
+            sector = _market_cache[ticker].get("sector") or "Other/Unknown"
 
         sector_values[sector] = sector_values.get(sector, 0.0) + val
         total_market_value += val
@@ -747,7 +745,6 @@ def calculate_tax_buckets(df_raw) -> dict:
             type_display = str(row["type_display"])
             if ticker in CASH_TICKERS: type_display = "Cash"
             elif ticker in FIXED_INCOME_TICKERS: type_display = "Fixed Income"
-            if ticker in MUTUAL_FUND_TICKERS: type_display = "Mutual Fund"
 
             holdings.append({
                 "ticker": ticker,

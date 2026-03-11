@@ -547,6 +547,7 @@
             <th>Value</th>
             <th>Weight</th>
             <th>Type</th>
+            <th>Sector</th>
           </tr>
         </thead>
         <tbody id="positions-body"></tbody>
@@ -833,6 +834,7 @@
       const market = await fetch('/api/market').then(r => r.json());
       _marketData = market;
       renderSectorAllocation(market.sectors);
+      renderPositions(_summaryData); // Fill in the sector column
     } catch (err) {
       panel.innerHTML = `<div style="height:200px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--accent-red)">Failed to load sectors</div>`;
     }
@@ -996,6 +998,12 @@
         const flag  = flaggedTickers.has(p.ticker)
           ? '<span class="flag-icon" title="Concentration flag">&#9888;</span>' : '';
         const color = colorFor(p.type_display);
+        
+        let sector = "Other/Unknown";
+        if (p.ticker && sectorMap[p.ticker]) sector = sectorMap[p.ticker];
+        else if (p.type_display === "Cash") sector = "Cash";
+        else if (p.type_display === "Fixed Income") sector = "Fixed Income";
+
         return `
           <tr>
             <td class="td-ticker">${label}${flag}</td>
@@ -1007,6 +1015,7 @@
                 ${p.type_display}
               </span>
             </td>
+            <td class="td-muted" style="font-size:11px">${sector}</td>
           </tr>`;
       }).join('');
   }
