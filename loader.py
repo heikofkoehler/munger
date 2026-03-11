@@ -239,7 +239,8 @@ def deduplicate(df):
 # ---------------------------------------------------------------------------
 
 CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
-FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX", "VFFSX"}
+FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
+MUTUAL_FUND_TICKERS = {"VFFSX"}
 
 
 def normalize_asset_class(df):
@@ -247,6 +248,7 @@ def normalize_asset_class(df):
     df = df.copy()
     df.loc[df["ticker"].isin(CASH_TICKERS), "type_display"] = "Cash"
     df.loc[df["ticker"].isin(FIXED_INCOME_TICKERS), "type_display"] = "Fixed Income"
+    df.loc[df["ticker"].isin(MUTUAL_FUND_TICKERS), "type_display"] = "Mutual Fund"
     return df
 
 
@@ -745,6 +747,7 @@ def calculate_tax_buckets(df_raw) -> dict:
             type_display = str(row["type_display"])
             if ticker in CASH_TICKERS: type_display = "Cash"
             elif ticker in FIXED_INCOME_TICKERS: type_display = "Fixed Income"
+            elif ticker in MUTUAL_FUND_TICKERS: type_display = "Mutual Fund"
 
             holdings.append({
                 "ticker": ticker,
