@@ -838,6 +838,9 @@
 
     const entries = Object.entries(sectors).sort((a, b) => b[1] - a[1]);
     
+    // Consistent color for a sector based on its index
+    const getColor = (index) => `hsl(${(index / entries.length) * 360}, 40%, 60%)`;
+
     // --- Donut Chart Calculation ---
     const size = 200;
     const center = size / 2;
@@ -846,10 +849,8 @@
     const circum = 2 * Math.PI * radius;
     let currentOffset = 0;
 
-    const paths = entries.map(([s, pct]) => {
-      // Use purple-ish palette for sectors or a rotating palette
-      const hue = (currentOffset / 100) * 360;
-      const color = `hsl(${hue}, 40%, 60%)`;
+    const paths = entries.map(([s, pct], i) => {
+      const color = getColor(i);
       const dashArray = `${(pct / 100) * circum} ${circum}`;
       const rotation = (currentOffset / 100) * 360 - 90;
       currentOffset += pct;
@@ -873,11 +874,15 @@
             fill="var(--text-primary)" style="font-size:14px; font-weight:700">Sectors</text>
         </svg>
         <div style="width:100%; max-height: 150px; overflow-y: auto; padding-right: 10px;">
-          ${entries.map(([s, pct]) => {
+          ${entries.map(([s, pct], i) => {
             const val = pct / 100 * (_summaryData?.total_value || 0);
+            const color = getColor(i);
             return `
               <div class="alloc-row" style="cursor:pointer; grid-template-columns: 1fr 80px 45px; font-size:11px" onclick="filterPositionsBySector('${s}')">
-                <div class="alloc-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${s}</div>
+                <div class="alloc-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">
+                  <div class="alloc-dot" style="background:${color}"></div>
+                  ${s}
+                </div>
                 <div class="inst-value" style="text-align:right">${fmtDollar(val)}</div>
                 <div class="inst-pct" style="text-align:right">${pct.toFixed(1)}%</div>
               </div>`;
