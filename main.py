@@ -17,6 +17,7 @@ from loader import (
     calculate_metrics,
     calculate_risk_metrics,
     calculate_efficiency_metrics,
+    calculate_sector_allocation,
     save_risk_snapshot,
     calculate_institutions,
     enrich_with_market_data,
@@ -89,7 +90,9 @@ def risk():
 @app.get("/api/market")
 def market():
     if "market" not in _cache:
-        _cache["market"] = enrich_with_market_data(_cache["summary"]["positions"])
+        enriched = enrich_with_market_data(_cache["summary"]["positions"])
+        sectors = calculate_sector_allocation(_cache["summary"]["positions"])
+        _cache["market"] = {"positions": enriched, "sectors": sectors}
     return _cache["market"]
 
 

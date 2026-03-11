@@ -517,13 +517,18 @@
 
     <div class="grid-2">
       <div class="card">
-        <div class="card-title">Allocation</div>
+        <div class="card-title">Allocation by Type</div>
         <div id="alloc-panel"></div>
       </div>
       <div class="card">
-        <div class="card-title">Concentration Risk</div>
-        <div id="flags-panel"></div>
+        <div class="card-title">Allocation by Sector</div>
+        <div id="sector-panel"></div>
       </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Concentration Risk</div>
+      <div id="flags-panel"></div>
     </div>
 
     <div class="card">
@@ -625,6 +630,7 @@
   let _taxData = null;
   let _activeTab = 'portfolio';
   let _assetFilter = null;
+  let _sectorFilter = null;
 
   // ── Tab switching ─────────────────────────────────────────────
   function switchTab(name) {
@@ -800,6 +806,91 @@
 
   function filterPositionsByAsset(assetType) {
     _assetFilter = assetType;
+    _sectorFilter = null; // Clear other filter
+    switchTab('portfolio');
+    renderPositions(_summaryData);
+  }
+
+  // ── Sector lazy load ──────────────────────────────────────────
+  async function loadSectorAllocation() {
+    const panel = document.getElementById('sector-panel');
+    if (!panel) return;
+    
+    if (_marketData && _marketData.sectors) {
+      renderSectorAllocation(_marketData.sectors);
+      return;
+    }
+
+    panel.innerHTML = `<div style="height:200px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-muted)">Loading sectors…</div>`;
+    
+    try {
+      const market = await fetch('/api/market').then(r => r.json());
+      _marketData = market;
+      renderSectorAllocation(market.sectors);
+    } catch (err) {
+      panel.innerHTML = `<div style="height:200px; display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--accent-red)">Failed to load sectors</div>`;
+    }
+  }
+
+  function renderSectorAllocation(sectors) {
+    const panel = document.getElementById('sector-panel');
+    if (!panel || !sectors) return;
+
+    const entries = Object.entries(sectors).sort((a, b) => b[1] - a[1]);
+    
+    // --- Donut Chart Calculation ---
+    const size = 200;
+    const center = size / 2;
+    const radius = 80;
+    const strokeWidth = 24;
+    const circum = 2 * Math.PI * radius;
+    let currentOffset = 0;
+
+    const paths = entries.map(([s, pct]) => {
+      // Use purple-ish palette for sectors or a rotating palette
+      const hue = (currentOffset / 100) * 360;
+      const color = `hsl(${hue}, 40%, 60%)`;
+      const dashArray = `${(pct / 100) * circum} ${circum}`;
+      const rotation = (currentOffset / 100) * 360 - 90;
+      currentOffset += pct;
+      return `
+        <circle cx="${center}" cy="${center}" r="${radius}" 
+          fill="transparent" stroke="${color}" stroke-width="${strokeWidth}"
+          stroke-dasharray="${dashArray}" transform="rotate(${rotation} ${center} ${center})"
+          style="cursor:pointer; transition: stroke-width 0.2s"
+          onmouseover="this.setAttribute('stroke-width', ${strokeWidth + 4})"
+          onmouseout="this.setAttribute('stroke-width', ${strokeWidth})"
+          onclick="filterPositionsBySector('${s}')">
+          <title>${s}: ${fmtPct(pct)}</title>
+        </circle>`;
+    }).join('');
+
+    const donutHtml = `
+      <div style="display:flex; flex-direction:column; align-items:center; gap:1rem;">
+        <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+          ${paths}
+          <text x="${center}" y="${center}" text-anchor="middle" dy="0.3em" 
+            fill="var(--text-primary)" style="font-size:14px; font-weight:700">Sectors</text>
+        </svg>
+        <div style="width:100%; max-height: 150px; overflow-y: auto; padding-right: 10px;">
+          ${entries.map(([s, pct]) => {
+            const val = pct / 100 * (_summaryData?.total_value || 0);
+            return `
+              <div class="alloc-row" style="cursor:pointer; grid-template-columns: 1fr 80px 45px; font-size:11px" onclick="filterPositionsBySector('${s}')">
+                <div class="alloc-name" style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${s}</div>
+                <div class="inst-value" style="text-align:right">${fmtDollar(val)}</div>
+                <div class="inst-pct" style="text-align:right">${pct.toFixed(1)}%</div>
+              </div>`;
+          }).join('')}
+        </div>
+      </div>`;
+
+    panel.innerHTML = donutHtml;
+  }
+
+  function filterPositionsBySector(sector) {
+    _sectorFilter = sector;
+    _assetFilter = null; // Clear other filter
     switchTab('portfolio');
     renderPositions(_summaryData);
   }
@@ -846,10 +937,24 @@
   function renderPositions(data) {
     if (!data || !data.positions) return;
     
-    // Filter by asset class if active
+    // Create ticker -> sector map if market data is available
+    const sectorMap = {};
+    if (_marketData && _marketData.positions) {
+      _marketData.positions.forEach(p => { if (p.ticker) sectorMap[p.ticker] = p.sector; });
+    }
+
+    // Filter by asset class or sector if active
     let positions = data.positions;
     if (_assetFilter) {
       positions = positions.filter(p => p.type_display === _assetFilter);
+    } else if (_sectorFilter) {
+      positions = positions.filter(p => {
+        let s = "Other/Unknown";
+        if (p.ticker && sectorMap[p.ticker]) s = sectorMap[p.ticker];
+        else if (p.type_display === "Cash") s = "Cash";
+        else if (p.type_display === "Fixed Income") s = "Fixed Income";
+        return s === _sectorFilter;
+      });
     }
 
     const flaggedTickers = new Set(
@@ -860,11 +965,13 @@
     const filterStatus = document.getElementById('positions-filter-status');
     
     if (filterStatus) {
-      if (_assetFilter) {
+      if (_assetFilter || _sectorFilter) {
+        const filterName = _assetFilter || _sectorFilter;
+        const filterType = _assetFilter ? "Asset Type" : "Sector";
         filterStatus.innerHTML = `
           <div style="display:flex; align-items:center; gap:10px; margin-bottom:1rem; font-size:13px; color:var(--text-secondary); background:rgba(255,255,255,0.03); padding:8px 12px; border-radius:6px; border:1px solid var(--border)">
-            <span>Filtered by: <strong>${_assetFilter}</strong></span>
-            <button onclick="_assetFilter=null; renderPositions(_summaryData)" style="background:transparent; border:none; color:var(--accent-purple); cursor:pointer; font-weight:600; font-size:12px; text-transform:uppercase; padding:0">Clear Filter</button>
+            <span>Filtered by ${filterType}: <strong>${filterName}</strong></span>
+            <button onclick="_assetFilter=null; _sectorFilter=null; renderPositions(_summaryData)" style="background:transparent; border:none; color:var(--accent-purple); cursor:pointer; font-weight:600; font-size:12px; text-transform:uppercase; padding:0">Clear Filter</button>
           </div>`;
       } else {
         filterStatus.innerHTML = '';
@@ -948,6 +1055,7 @@
     if (!data) return;
     renderHero(data);
     renderAllocation(data);
+    loadSectorAllocation();
     renderFlags(data);
     renderInstitutions(data);
     renderPositions(data);

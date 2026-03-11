@@ -601,6 +601,41 @@ YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
 _market_cache: dict = {}  # keyed by ticker string
 
 
+def calculate_sector_allocation(positions: list) -> dict:
+    """
+    Calculate portfolio allocation by economic sector.
+    Returns: {"Technology": 40.5, "Financial Services": 20.1, ...}
+    """
+    # Use global market cache to resolve sectors for tickers
+    sector_values = {}
+    total_market_value = 0
+
+    for p in positions:
+        ticker = p.get("ticker")
+        val = p.get("value") or 0
+        
+        # Default to "Other/Unknown" if no sector found
+        sector = "Other/Unknown"
+        if ticker and ticker in _market_cache:
+            sector = _market_cache[ticker].get("sector") or "Other/Unknown"
+        elif p.get("type_display") == "Cash":
+            sector = "Cash"
+        elif p.get("type_display") == "Fixed Income":
+            sector = "Fixed Income"
+
+        sector_values[sector] = sector_values.get(sector, 0.0) + val
+        total_market_value += val
+
+    if total_market_value == 0:
+        return {}
+
+    # Convert to percentages
+    return {
+        s: round((v / total_market_value) * 100, 2)
+        for s, v in sector_values.items()
+    }
+
+
 def enrich_with_market_data(positions: list) -> list:
     """
     Enrich each position dict with market data from yfinance.
