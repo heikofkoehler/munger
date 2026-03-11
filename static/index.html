@@ -689,7 +689,10 @@
 
   // ── Dividends lazy load (needs market + tax) ─────────────────
   async function loadDividends() {
-    if (_marketData && _taxData) { renderDividends(_marketData, _taxData); return; }
+    if (_marketData && _taxData) { 
+      renderDividends(_marketData.positions || _marketData, _taxData); 
+      return; 
+    }
     document.getElementById('div-content').innerHTML = spinner();
     try {
       const [market, tax] = await Promise.all([
@@ -698,7 +701,7 @@
       ]);
       _marketData = market;
       _taxData = tax;
-      renderDividends(_marketData, _taxData);
+      renderDividends(market.positions || market, _taxData);
     } catch (err) {
       document.getElementById('div-content').innerHTML =
         `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load: ${err.message}</div>`;
@@ -707,7 +710,10 @@
 
   // ── Earnings lazy load (needs market + tax) ───────────────────
   async function loadEarnings() {
-    if (_marketData && _taxData) { renderEarnings(_marketData, _taxData); return; }
+    if (_marketData && _taxData) { 
+      renderEarnings(_marketData.positions || _marketData, _taxData); 
+      return; 
+    }
     document.getElementById('earn-content').innerHTML = spinner();
     try {
       const [market, tax] = await Promise.all([
@@ -716,7 +722,7 @@
       ]);
       _marketData = market;
       _taxData = tax;
-      renderEarnings(_marketData, _taxData);
+      renderEarnings(market.positions || market, _taxData);
     } catch (err) {
       document.getElementById('earn-content').innerHTML =
         `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load: ${err.message}</div>`;
