@@ -1294,11 +1294,31 @@
 
     // Overall totals
     let totalIncome = 0, totalValue = 0;
+    const typeIncome = {};
     for (const p of marketPositions) {
-      totalValue += p.value || 0;
-      totalIncome += _divIncome(p) || 0;
+      const val = p.value || 0;
+      const inc = _divIncome(p) || 0;
+      const type = p.type_display || 'Other';
+      
+      totalValue += val;
+      totalIncome += inc;
+      typeIncome[type] = (typeIncome[type] || 0) + inc;
     }
     const yieldOnValue = totalValue > 0 ? (totalIncome / totalValue * 100) : 0;
+
+    const typeBreakdownHtml = Object.entries(typeIncome)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, inc]) => {
+        const pct = totalIncome > 0 ? (inc / totalIncome * 100) : 0;
+        const color = colorFor(type);
+        return `
+          <div class="alloc-row" style="grid-template-columns: 100px 1fr 100px 45px; border-bottom:none; padding: 4px 0">
+            <div class="alloc-name"><div class="alloc-dot" style="background:${color}"></div>${type}</div>
+            <div class="inst-bar-wrap"><div class="inst-bar" style="width:${pct}%; background:${color}"></div></div>
+            <div class="inst-value" style="text-align:right">${fmtDollar(inc)}/yr</div>
+            <div class="inst-pct" style="text-align:right">${pct.toFixed(0)}%</div>
+          </div>`;
+      }).join('');
 
     // One card per tax bucket
     const sections = Object.entries(taxData.buckets).map(([label, bucket]) => {
@@ -1363,6 +1383,14 @@
         <div class="hero-value" style="color:var(--accent-teal)">${fmtDollar(totalIncome)}</div>
         <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total holdings: ${fmtDollarFull(totalValue)}</div>
       </div>
+      
+      <div class="card" style="max-width: 600px; margin: 0 auto 2rem;">
+        <div class="card-title" style="text-align:center">Income Breakdown by Type</div>
+        <div style="margin-top: 1rem">
+          ${typeBreakdownHtml}
+        </div>
+      </div>
+
       ${sections}`;
     document.querySelectorAll('#div-content table').forEach(makeSortable);
   }
