@@ -1410,9 +1410,9 @@
       
       if (p.trailing_pe > 0) {
         earnings = p.value / p.trailing_pe;
-      } else if (p.dividend_yield > 0) {
-        // For Fixed Income/ETFs without PE, yield is effectively the 'earnings'
-        earnings = p.value * p.dividend_yield / 100;
+      } else {
+        // Use unified dividend logic for non-PE assets (like bonds)
+        earnings = _divIncome(p) || 0;
       }
       totalPortfolioEarnings += earnings;
       typeEarnings[type] = (typeEarnings[type] || 0) + earnings;
@@ -1464,8 +1464,10 @@
           let earnings = 0;
           if (mkt.trailing_pe > 0) {
             earnings = h.value / mkt.trailing_pe;
-          } else if (mkt.dividend_yield > 0) {
-            earnings = h.value * mkt.dividend_yield / 100;
+          } else {
+            // Use same logic as Dividends tab for consistency
+            if (mkt.dividend_rate && h.quantity) earnings = h.quantity * mkt.dividend_rate;
+            else if (mkt.dividend_yield && h.value) earnings = h.value * mkt.dividend_yield / 100;
           }
           bucketEarnings += earnings;
           return { ...mkt, ...h, _earnings: earnings };
