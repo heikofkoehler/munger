@@ -1403,8 +1403,11 @@
 
     // Overall weighted P/E and Total Earnings
     let wPE = 0, wTot = 0, totalPortfolioEarnings = 0;
+    const typeEarnings = {};
     for (const p of marketPositions) {
       let earnings = 0;
+      const type = p.type_display || 'Other';
+      
       if (p.trailing_pe > 0) {
         earnings = p.value / p.trailing_pe;
       } else if (p.dividend_yield > 0) {
@@ -1412,6 +1415,7 @@
         earnings = p.value * p.dividend_yield / 100;
       }
       totalPortfolioEarnings += earnings;
+      typeEarnings[type] = (typeEarnings[type] || 0) + earnings;
 
       if ((p.type_display === 'Stock' || p.type_display === 'ETF')
           && p.trailing_pe && p.trailing_pe > 0) {
@@ -1419,6 +1423,20 @@
       }
     }
     const avgPE = wTot > 0 ? wPE / wTot : null;
+
+    const typeBreakdownHtml = Object.entries(typeEarnings)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, earn]) => {
+        const pct = totalPortfolioEarnings > 0 ? (earn / totalPortfolioEarnings * 100) : 0;
+        const color = colorFor(type);
+        return `
+          <div class="alloc-row" style="grid-template-columns: 100px 1fr 100px 45px; border-bottom:none; padding: 4px 0">
+            <div class="alloc-name"><div class="alloc-dot" style="background:${color}"></div>${type}</div>
+            <div class="inst-bar-wrap"><div class="inst-bar" style="width:${pct}%; background:${color}"></div></div>
+            <div class="inst-value" style="text-align:right">${fmtDollar(earn)}/yr</div>
+            <div class="inst-pct" style="text-align:right">${pct.toFixed(0)}%</div>
+          </div>`;
+      }).join('');
 
     // Overall projected income
     let totalDividendIncome = 0;
@@ -1526,6 +1544,14 @@
         <div class="hero-value" style="color:var(--accent-blue)">${fmtDollar(totalPortfolioEarnings)}</div>
         <div class="hero-sub">Weighted Avg P/E: ${avgPE != null ? fmtNum(avgPE) : '—'} &nbsp;·&nbsp; Projected Dividends: ${fmtDollar(totalDividendIncome)}</div>
       </div>
+      
+      <div class="card" style="max-width: 600px; margin: 0 auto 2rem;">
+        <div class="card-title" style="text-align:center">Earnings Breakdown by Type</div>
+        <div style="margin-top: 1rem">
+          ${typeBreakdownHtml}
+        </div>
+      </div>
+
       ${sections}`;
     document.querySelectorAll('#earn-content table').forEach(makeSortable);
   }
