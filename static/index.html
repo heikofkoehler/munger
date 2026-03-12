@@ -971,8 +971,23 @@
     }
 
     const flaggedTickers = new Set(
-      (data.concentration || []).filter(c => c.flagged).map(c => c.ticker)
+      (data.concentration || []).map(c => c.ticker)
     );
+
+    // Map for share class aggregation check in UI
+    const MASTER_MAP = {
+      'GOOG': 'GOOGL',
+      'BRK-A': 'BRK-B',
+      'BRKA': 'BRK-B',
+      'BRKB': 'BRK-B'
+    };
+
+    const isFlagged = (ticker) => {
+      if (!ticker) return false;
+      if (flaggedTickers.has(ticker)) return true;
+      const master = MASTER_MAP[ticker];
+      return master && flaggedTickers.has(master);
+    };
 
     const tbody = document.getElementById('positions-body');
     const filterStatus = document.getElementById('positions-filter-status');
@@ -995,7 +1010,7 @@
       .filter(p => p.value >= 1)
       .map(p => {
         const label = tickerLink(p.ticker || p.security_name.slice(0, 15));
-        const flag  = flaggedTickers.has(p.ticker)
+        const flag  = isFlagged(p.ticker)
           ? '<span class="flag-icon" title="Concentration flag">&#9888;</span>' : '';
         const color = colorFor(p.type_display);
         
