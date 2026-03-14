@@ -719,13 +719,20 @@
       const mosColor = v.mos > 0.3 ? 'var(--accent-teal)' : (v.mos > 0 ? 'var(--accent-amber)' : 'var(--accent-red)');
       const scoreColor = v.quality_score >= 75 ? 'var(--accent-teal)' : (v.quality_score >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)');
       
+      const scoreTooltip = [
+        (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
+        (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
+        (v.gross_margin > 0.4 ? '✓' : '✗') + ' Gross Margin > 40% (' + (v.gross_margin*100).toFixed(1) + '%)',
+        (v.net_margin > 0.1 ? '✓' : '✗') + ' Net Margin > 10% (' + (v.net_margin*100).toFixed(1) + '%)'
+      ].join('\n');
+
       return `<tr>
         <td class="td-ticker">${tickerLink(v.ticker)}</td>
         <td class="td-name">${v.security_name}</td>
         <td class="td-value">${fmtDollarFull(v.current_price)}</td>
         <td class="td-value" style="font-weight:600">${fmtDollarFull(v.intrinsic_price)}</td>
         <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
-        <td class="td-num" style="color:${scoreColor}; font-weight:700">${v.quality_score}</td>
+        <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${v.quality_score}</td>
         <td class="td-num">${(v.roe * 100).toFixed(1)}%</td>
         <td class="td-num">${v.debt_to_equity.toFixed(2)}</td>
         <td class="td-value" title="User's proportional share: ${fmtDollar(v.portfolio_owner_earnings)}">${fmtDollarFull(v.owner_earnings_ps)}</td>
