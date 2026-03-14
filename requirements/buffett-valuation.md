@@ -14,7 +14,7 @@ Buffett prefers "Owner Earnings" over GAAP Net Income or EBITDA.
 Intrinsic value is the discounted value of all cash that can be taken out of a business during its remaining life.
 *   **Projection Period:** 10 years.
 *   **Growth Rate:** Conservative 5% annual growth for the projection period.
-*   **Discount Rate:** 10-year U.S. Treasury Yield (`^TNX`). A floor of **4.0%** is applied to ensure a conservative valuation even in low-interest-rate environments.
+*   **Discount Rate:** 10-year U.S. Treasury Yield (`^TNX`). A floor of **5.8%** (50-year average) is applied to ensure a conservative valuation even in low-interest-rate environments.
 *   **Terminal Value:** Calculated beyond year 10 using a **2% terminal growth rate** (long-term GDP/inflation proxy).
     *   `Terminal Value = [Year 10 Earnings * (1 + 2%)] / (Discount Rate - 2%)`
 *   **Calculation:** The Intrinsic Value is the sum of the Present Value (PV) of all 10 years of projected Owner Earnings plus the PV of the Terminal Value, divided by the total shares outstanding.

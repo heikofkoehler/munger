@@ -895,7 +895,7 @@ def calculate_valuation_metrics(positions: list) -> list:
             # Simplified DCF (10 years)
             # Growth rate: conservative 5% for the projection period
             growth_rate = 0.05 
-            discount_rate = max(rf_rate, 0.04) # 4% floor (previously 10%)
+            discount_rate = max(rf_rate, 0.058) # 5.8% floor (50-year average)
             
             # Sum of PV of Owner Earnings for 10 years
             pv_sum = 0
