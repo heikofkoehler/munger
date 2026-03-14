@@ -483,6 +483,61 @@
       z-index: 100;
     }
     #loading.hidden { display: none; }
+
+    /* ── Modal for Sensitivity Table ────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      z-index: 200;
+      display: none; align-items: center; justify-content: center;
+      padding: 2rem;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 100%; max-width: 800px;
+      max-height: 90vh; overflow-y: auto;
+      padding: 2rem;
+      box-shadow: 0 24px 48px rgba(0,0,0,0.4);
+    }
+    .modal-header {
+      display: flex; justify-content: space-between; align-items: flex-start;
+      margin-bottom: 1.5rem;
+    }
+    .modal-title { font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    .modal-close {
+      background: transparent; border: none; color: var(--text-muted);
+      font-size: 24px; cursor: pointer; padding: 0; line-height: 1;
+    }
+    .modal-close:hover { color: var(--text-primary); }
+
+    .sens-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 2px;
+      font-size: 11px;
+      margin-top: 1rem;
+    }
+    .sens-table th, .sens-table td {
+      padding: 8px 4px; text-align: center;
+      border-radius: 2px;
+      color: var(--text-primary);
+    }
+    .sens-table th { background: var(--bg-card-2); color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .sens-header-r { border-bottom: 2px solid var(--accent-purple); }
+    .sens-header-g { border-right: 2px solid var(--accent-teal); }
+    .sens-cell { transition: transform 0.1s; cursor: default; font-weight: 600; }
+    .sens-cell:hover { transform: scale(1.1); z-index: 1; outline: 1px solid var(--text-primary); }
+    .sens-base { outline: 2px solid var(--text-primary); transform: scale(1.05); }
+    
+    .sens-legend {
+      display: flex; gap: 2rem; margin-top: 1.5rem; font-size: 12px; color: var(--text-muted);
+    }
+    .sens-legend-item { display: flex; align-items: center; gap: 8px; }
+    .sens-color-swatch { width: 12px; height: 12px; border-radius: 2px; }
   </style>
 </head>
 <body>
@@ -589,6 +644,31 @@
 </div>
 </div><!-- .content -->
 </div><!-- .layout -->
+
+<!-- ── Sensitivity Modal ── -->
+<div id="sens-modal" class="modal-overlay" onclick="closeSensitivity(event)">
+  <div class="modal-card" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <div id="sens-title" class="modal-title">Sensitivity Analysis</div>
+      <button class="modal-close" onclick="closeSensitivity()">&times;</button>
+    </div>
+    <div id="sens-description" class="hero-sub" style="margin-bottom: 1rem;">
+      Exploring the relationship between WACC ($r$) and Growth ($g$) for intrinsic valuation.
+    </div>
+    <div id="sens-content"></div>
+    <div class="sens-legend">
+      <div class="sens-legend-item">
+        <div class="sens-color-swatch" style="background:var(--accent-teal)"></div> Overvalued (Price < Value)
+      </div>
+      <div class="sens-legend-item">
+        <div class="sens-color-swatch" style="background:var(--accent-red)"></div> Undervalued (Price > Value)
+      </div>
+      <div class="sens-legend-item">
+        <div class="sens-color-swatch" style="outline:1px solid var(--text-primary)"></div> Base Assumptions
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
   // ── Constants ─────────────────────────────────────────────────
@@ -730,7 +810,7 @@
         <td class="td-ticker">${tickerLink(v.ticker)}</td>
         <td class="td-name">${v.security_name}</td>
         <td class="td-value">${fmtDollarFull(v.current_price)}</td>
-        <td class="td-value" style="font-weight:600">${fmtDollarFull(v.intrinsic_price)}</td>
+        <td class="td-value" style="font-weight:600; cursor:pointer; color:var(--accent-purple)" onclick="showSensitivity('${v.ticker}')" title="Click for Sensitivity Analysis">${fmtDollarFull(v.intrinsic_price)}</td>
         <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
         <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${v.quality_score}</td>
         <td class="td-num">${(v.roe * 100).toFixed(1)}%</td>
@@ -765,6 +845,83 @@
       </div>
     `;
     document.querySelectorAll('#panel-valuation table').forEach(makeSortable);
+  }
+
+  function showSensitivity(ticker) {
+    const v = (_summaryData.valuation || []).find(x => x.ticker === ticker);
+    if (!v) return;
+
+    const modal = document.getElementById('sens-modal');
+    const title = document.getElementById('sens-title');
+    const content = document.getElementById('sens-content');
+    
+    title.innerText = `Sensitivity Analysis: ${v.ticker}`;
+    modal.classList.add('active');
+
+    // DCF Calculation Logic (Matches loader.py)
+    const calcDCF = (oe, r, g, tg) => {
+        let pvSum = 0;
+        let currentOe = oe;
+        for (let i = 1; i <= 10; i++) {
+            currentOe *= (1 + g);
+            pvSum += currentOe / Math.pow(1 + r, i);
+        }
+        const terminalVal = (currentOe * (1 + tg)) / (r - tg);
+        const pvTerminal = terminalVal / Math.pow(1 + r, 10);
+        return pvSum + pvTerminal;
+    };
+
+    // Range: r +/- 2%, g +/- 2%
+    const baseR = v.discount_rate;
+    const baseG = v.growth_rate;
+    const tg = v.terminal_growth_rate || 0.02;
+    const oe = v.owner_earnings_ps;
+    const currentPrice = v.current_price;
+
+    const rRange = [baseR - 0.02, baseR - 0.01, baseR, baseR + 0.01, baseR + 0.02];
+    const gRange = [baseG - 0.02, baseG - 0.01, baseG, baseG + 0.01, baseG + 0.02];
+
+    let tableHtml = `<table class="sens-table">`;
+    
+    // Header Row (Growth Rates)
+    tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (r) ↓ \\ Growth (g) →</th>`;
+    gRange.forEach(g => {
+        tableHtml += `<th class="sens-header-r">${(g * 100).toFixed(1)}%</th>`;
+    });
+    tableHtml += `</tr></thead><tbody>`;
+
+    rRange.forEach(r => {
+        tableHtml += `<tr><th class="sens-header-g">${(r * 100).toFixed(1)}%</th>`;
+        gRange.forEach(g => {
+            const val = calcDCF(oe, r, g, tg);
+            const isBase = Math.abs(r - baseR) < 0.001 && Math.abs(g - baseG) < 0.001;
+            
+            // Heatmap color based on Price/Value
+            const ratio = currentPrice / val;
+            let bgColor = 'transparent';
+            
+            if (ratio < 1) { // Undervalued (Teal)
+                const intensity = Math.min(0.8, (1 - ratio) * 2);
+                bgColor = `rgba(0, 212, 170, ${intensity})`;
+            } else { // Overvalued (Red)
+                const intensity = Math.min(0.8, (ratio - 1) * 2);
+                bgColor = `rgba(224, 92, 92, ${intensity})`;
+            }
+
+            const cellClass = isBase ? 'sens-cell sens-base' : 'sens-cell';
+            tableHtml += `<td class="${cellClass}" style="background-color:${bgColor}" title="r=${(r*100).toFixed(1)}%, g=${(g*100).toFixed(1)}%">${fmtDollarFull(val)}</td>`;
+        });
+        tableHtml += `</tr>`;
+    });
+
+    tableHtml += `</tbody></table>`;
+    content.innerHTML = tableHtml;
+  }
+
+  function closeSensitivity(e) {
+    if (!e || e.target === document.getElementById('sens-modal') || e.target.classList.contains('modal-close')) {
+        document.getElementById('sens-modal').classList.remove('active');
+    }
   }
 
   // ── Dividends lazy load (needs market + tax) ─────────────────

@@ -946,6 +946,9 @@ def calculate_valuation_metrics(positions: list) -> list:
                 "debt_to_equity": round(float(debt_to_equity), 4),
                 "owner_earnings_ps": round(float(owner_earnings_ps), 2),
                 "portfolio_owner_earnings": round(float(portfolio_owner_earnings), 2),
+                "discount_rate": round(float(discount_rate), 4),
+                "growth_rate": round(float(growth_rate), 4),
+                "terminal_growth_rate": round(float(terminal_growth_rate), 4),
                 "gross_margin": round(float(gross_margin), 4),
                 "net_margin": round(float(net_margin), 4),
             }
