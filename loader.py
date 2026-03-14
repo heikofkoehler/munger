@@ -897,7 +897,8 @@ def calculate_valuation_metrics(positions: list) -> list:
             net_margin = info.get("profitMargins") or 0
             
             # Simplified DCF (10 years)
-            discount_rate = max(rf_rate, 0.058) # 5.8% floor (50-year average)
+            risk_premium = 0.04 # 4% Equity Risk Premium (Professional Standard)
+            discount_rate = max(rf_rate, 0.058) + risk_premium # Rf (min 5.8%) + ERP
             
             # Sum of PV of Owner Earnings for 10 years
             pv_sum = 0
