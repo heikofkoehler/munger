@@ -781,6 +781,7 @@
     document.getElementById('val-content').innerHTML = spinner('Calculating intrinsic value and owner earnings… (~15s)');
     try {
       const val = await fetch('/api/valuation').then(r => r.json());
+      if (_summaryData) _summaryData.valuation = val;
       renderValuation(val);
     } catch (err) {
       document.getElementById('val-content').innerHTML =
@@ -848,8 +849,16 @@
   }
 
   function showSensitivity(ticker) {
-    const v = (_summaryData.valuation || []).find(x => x.ticker === ticker);
-    if (!v) return;
+    console.log('Sensitivity requested for:', ticker);
+    if (!_summaryData || !_summaryData.valuation) {
+        console.error('No valuation data available in state.');
+        return;
+    }
+    const v = _summaryData.valuation.find(x => x.ticker === ticker);
+    if (!v) {
+        console.error('Ticker not found in valuation data:', ticker);
+        return;
+    }
 
     const modal = document.getElementById('sens-modal');
     const title = document.getElementById('sens-title');
