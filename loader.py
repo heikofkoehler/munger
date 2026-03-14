@@ -837,6 +837,10 @@ def calculate_valuation_metrics(positions: list) -> list:
             results.append(_valuation_cache[ticker])
             continue
         
+        # Default assumptions
+        growth_rate = 0.05
+        terminal_growth_rate = 0.02
+        
         try:
             # yfinance sometimes prefers . over - for share classes
             yf_ticker = ticker.replace("-", ".")
@@ -893,8 +897,6 @@ def calculate_valuation_metrics(positions: list) -> list:
             net_margin = info.get("profitMargins") or 0
             
             # Simplified DCF (10 years)
-            # Growth rate: conservative 5% for the projection period
-            growth_rate = 0.05 
             discount_rate = max(rf_rate, 0.058) # 5.8% floor (50-year average)
             
             # Sum of PV of Owner Earnings for 10 years
@@ -905,7 +907,6 @@ def calculate_valuation_metrics(positions: list) -> list:
                 pv_sum += current_oe / ((1 + discount_rate) ** i)
             
             # Terminal Value (Year 10)
-            terminal_growth_rate = 0.02 # Terminal growth tied to long-term GDP
             terminal_val = (current_oe * (1 + terminal_growth_rate)) / (discount_rate - terminal_growth_rate)
             pv_terminal = terminal_val / ((1 + discount_rate) ** 10)
             

@@ -3,6 +3,7 @@ main.py — Munger FastAPI backend
 
 Serves the portfolio dashboard at http://localhost:8000.
 Run with: uvicorn main:app --reload
+# Force reload for valuation fix v2
 """
 
 from fastapi import FastAPI
