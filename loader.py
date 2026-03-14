@@ -905,8 +905,8 @@ def calculate_valuation_metrics(positions: list) -> list:
                 pv_sum += current_oe / ((1 + discount_rate) ** i)
             
             # Terminal Value (Year 10)
-            terminal_growth = 0.02 # Terminal growth tied to long-term GDP
-            terminal_val = (current_oe * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+            terminal_growth_rate = 0.02 # Terminal growth tied to long-term GDP
+            terminal_val = (current_oe * (1 + terminal_growth_rate)) / (discount_rate - terminal_growth_rate)
             pv_terminal = terminal_val / ((1 + discount_rate) ** 10)
             
             intrinsic_value_total = pv_sum + pv_terminal
