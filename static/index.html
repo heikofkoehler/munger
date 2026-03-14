@@ -811,7 +811,7 @@
         <td class="td-ticker">${tickerLink(v.ticker)}</td>
         <td class="td-name">${v.security_name}</td>
         <td class="td-value">${fmtDollarFull(v.current_price)}</td>
-        <td class="td-value" style="font-weight:600; cursor:pointer; color:var(--accent-purple)" onclick="showSensitivity('${v.ticker}')" title="Click for Sensitivity Analysis">${fmtDollarFull(v.intrinsic_price)}</td>
+        <td class="td-value" style="font-weight:600; cursor:pointer; color:${mosColor}" onclick="showSensitivity('${v.ticker}')" title="Click for Sensitivity Analysis">${fmtDollarFull(v.intrinsic_price)}</td>
         <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
         <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${v.quality_score}</td>
         <td class="td-num">${(v.roe * 100).toFixed(1)}%</td>
