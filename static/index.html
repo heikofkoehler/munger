@@ -510,7 +510,7 @@
   <!-- ── Portfolio tab ── -->
   <div id="panel-portfolio" class="tab-panel active">
     <div class="hero">
-      <div class="hero-label">Net Worth</div>
+      <div class="hero-label">Portfolio Value</div>
       <div id="total-value" class="hero-value">—</div>
       <div id="price-date" class="hero-date">—</div>
     </div>
@@ -1163,7 +1163,7 @@
         <div class="card-title">Aggregated Single-Stock Concentration (True Exposure)</div>
         <div class="hero-sub" style="margin-bottom:1rem">
           Includes direct holdings + proportional holdings from ETFs & Mutual Funds.
-          Flagged if > 10% of total Net Worth.
+          Flagged if > 10% of total Portfolio Value.
         </div>
         <table>
           <thead>
@@ -1596,7 +1596,7 @@
       return `<div class="card bucket-hero-card">
         <div class="bucket-label">${label}</div>
         <div class="bucket-value">${fmtDollar(val)}</div>
-        <div class="bucket-pct">${fmtNum(pct)}% of portfolio</div>
+        <div class="bucket-pct">${fmtNum(pct)}% of Portfolio Value</div>
         ${gainHtml}
       </div>`;
     }).join('');
