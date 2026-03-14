@@ -790,7 +790,175 @@ def calculate_tax_buckets(df_raw) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# 10. CLI entry point
+# 10. Buffett Valuation
+# ---------------------------------------------------------------------------
+
+_valuation_cache: dict = {}
+
+
+def calculate_valuation_metrics(positions: list) -> list:
+    """
+    Calculate Buffett-style valuation metrics for stocks in the portfolio.
+    Includes Owner Earnings, ROE, Debt-to-Equity, and a simplified DCF intrinsic value.
+    """
+    import yfinance as yf
+    import pandas as pd
+    import sys
+
+    # 1. Get Risk-Free Rate (^TNX)
+    try:
+        tnx = yf.Ticker("^TNX")
+        rf_rate_raw = tnx.info.get("regularMarketPrice") or tnx.info.get("previousClose")
+        rf_rate = float(rf_rate_raw) / 100 if rf_rate_raw else 0.04
+    except Exception:
+        rf_rate = 0.04
+
+    # 2. Identify unique stock tickers (relaxed type check)
+    unique_tickers = set()
+    for p in positions:
+        ticker = p.get("ticker")
+        if not ticker or ticker in YFINANCE_SKIP_TICKERS or ticker.startswith("UNKNOWN"):
+            continue
+        
+        # Consider anything as "Stock" if it's explicitly labelled or if it's not Cash/Fixed Income/ETF
+        is_equity = p.get("type_display") in ["Stock", "Equity", "Equity / ETF"]
+        # Fallback: if it's not Cash/ETF/Mutual Fund and has a valid-looking ticker
+        if not is_equity and p.get("type_display") not in ["Cash", "Fixed Income", "ETF", "Mutual Fund"]:
+            is_equity = True
+            
+        if is_equity:
+            unique_tickers.add(ticker)
+
+    print(f"Valuation: analyzing {len(unique_tickers)} tickers: {unique_tickers}", flush=True)
+
+    results = []
+    for ticker in unique_tickers:
+        if ticker in _valuation_cache:
+            results.append(_valuation_cache[ticker])
+            continue
+        
+        try:
+            # yfinance sometimes prefers . over - for share classes
+            yf_ticker = ticker.replace("-", ".")
+            t = yf.Ticker(yf_ticker)
+            
+            # Use fast_info if available or check info
+            info = t.info
+            if not info or not info.get("shortName"):
+                # Try fallback to original ticker
+                t = yf.Ticker(ticker)
+                info = t.info
+                if not info or not info.get("shortName"):
+                    continue
+
+            inc = t.income_stmt
+            bal = t.balance_sheet
+            cf = t.cashflow
+
+            if inc.empty or bal.empty or cf.empty:
+                print(f"Valuation: missing financial statements for {ticker}", flush=True)
+                continue
+
+            # Latest annual figures (first column)
+            def get_val(df, keys):
+                for k in keys:
+                    if k in df.index and not df.loc[k].empty:
+                        return float(df.loc[k].iloc[0])
+                return 0.0
+
+            net_income = get_val(inc, ["Net Income", "Net Income Common Stockholders"])
+            if net_income == 0:
+                print(f"Valuation: skipping {ticker} due to missing Net Income", flush=True)
+                continue
+            
+            # Depreciation & Amortization
+            dep = get_val(cf, ["Depreciation And Amortization", "Depreciation Amortization Depletion", "Reconciled Depreciation"])
+                
+            # CapEx
+            capex = abs(get_val(cf, ["Capital Expenditure", "Purchase Of PPE", "Purchase Of Business"]))
+            
+            # Maintenance CapEx estimate: Min of total CapEx and Depreciation (conservative approximation)
+            maint_capex = min(capex, dep) if dep > 0 else capex
+            owner_earnings = net_income + dep - maint_capex
+            
+            # Equity & Debt
+            equity = get_val(bal, ["Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"])
+                
+            roe = net_income / equity if equity > 0 else 0
+            
+            debt = get_val(bal, ["Total Debt", "Net Debt", "Long Term Debt"])
+            debt_to_equity = debt / equity if equity > 0 else 0
+            
+            gross_margin = info.get("grossMargins") or 0
+            net_margin = info.get("profitMargins") or 0
+            
+            # Simplified DCF (10 years)
+            # Growth rate: conservative 5% for the projection period
+            growth_rate = 0.05 
+            discount_rate = max(rf_rate, 0.10) # 10% floor as per Buffett's preference for margin of safety
+            
+            # Sum of PV of Owner Earnings for 10 years
+            pv_sum = 0
+            current_oe = owner_earnings
+            for i in range(1, 11):
+                current_oe *= (1 + growth_rate)
+                pv_sum += current_oe / ((1 + discount_rate) ** i)
+            
+            # Terminal Value (Year 10)
+            terminal_growth = 0.02 # Terminal growth tied to long-term GDP
+            terminal_val = (current_oe * (1 + terminal_growth)) / (discount_rate - terminal_growth)
+            pv_terminal = terminal_val / ((1 + discount_rate) ** 10)
+            
+            intrinsic_value_total = pv_sum + pv_terminal
+            shares = info.get("impliedSharesOutstanding") or info.get("sharesOutstanding")
+            
+            current_price = info.get("currentPrice") or info.get("regularMarketPrice") or 0
+            owner_earnings_ps = 0.0
+            if shares and shares > 0:
+                intrinsic_price = intrinsic_value_total / shares
+                mos = (1 - (current_price / intrinsic_price)) if intrinsic_price > 0 else -1
+                owner_earnings_ps = owner_earnings / shares
+            else:
+                intrinsic_price = 0
+                mos = -1
+
+            # Calculate user's proportional share of owner earnings
+            pos_match = [p for p in positions if p.get("ticker") == ticker]
+            total_qty = sum(p.get("quantity") or 0 for p in pos_match)
+            portfolio_owner_earnings = total_qty * owner_earnings_ps
+
+            # Quality Score (0-100)
+            # ROE > 15% (25 pts), Debt/Equity < 0.5 (25 pts), Gross Margin > 40% (25 pts), Net Margin > 10% (25 pts)
+            score = 0
+            if roe > 0.15: score += 25
+            if debt_to_equity < 0.5: score += 25
+            if gross_margin > 0.40: score += 25
+            if net_margin > 0.10: score += 25
+
+            val_data = {
+                "ticker": ticker,
+                "security_name": info.get("longName") or ticker,
+                "current_price": round(float(current_price), 2),
+                "intrinsic_price": round(float(intrinsic_price), 2),
+                "mos": round(float(mos), 4),
+                "quality_score": score,
+                "roe": round(float(roe), 4),
+                "debt_to_equity": round(float(debt_to_equity), 4),
+                "owner_earnings_ps": round(float(owner_earnings_ps), 2),
+                "portfolio_owner_earnings": round(float(portfolio_owner_earnings), 2),
+                "gross_margin": round(float(gross_margin), 4),
+                "net_margin": round(float(net_margin), 4),
+            }
+            _valuation_cache[ticker] = val_data
+            results.append(val_data)
+        except Exception as e:
+            print(f"Error valuing {ticker}: {e}", file=sys.stderr)
+
+    return sorted(results, key=lambda x: x["quality_score"], reverse=True)
+
+
+# ---------------------------------------------------------------------------
+# 11. CLI entry point
 # ---------------------------------------------------------------------------
 
 def main():

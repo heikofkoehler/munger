@@ -499,6 +499,7 @@
   <button class="tab-btn active" onclick="switchTab('portfolio')">Portfolio</button>
   <button class="tab-btn" onclick="switchTab('risk')">Risk</button>
   <button class="tab-btn" onclick="switchTab('efficiency')">Efficiency</button>
+  <button class="tab-btn" onclick="switchTab('valuation')">Valuation</button>
   <button class="tab-btn" onclick="switchTab('dividends')">Dividends</button>
   <button class="tab-btn" onclick="switchTab('earnings')">Earnings</button>
   <button class="tab-btn" onclick="switchTab('accounts')">Accounts</button>
@@ -563,6 +564,11 @@
   <!-- ── Efficiency tab ── -->
   <div id="panel-efficiency" class="tab-panel">
     <div id="eff-content"></div>
+  </div>
+
+  <!-- ── Valuation tab ── -->
+  <div id="panel-valuation" class="tab-panel">
+    <div id="val-content"></div>
   </div>
 
   <!-- ── Dividends tab ── -->
@@ -647,6 +653,8 @@
       loadRisk();
     } else if (name === 'efficiency') {
       loadEfficiency();
+    } else if (name === 'valuation') {
+      loadValuation();
     } else if (name === 'dividends') {
       loadDividends();
     } else if (name === 'earnings') {
@@ -686,6 +694,70 @@
       document.getElementById('eff-content').innerHTML =
         `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load efficiency data: ${err.message}</div>`;
     }
+  }
+
+  // ── Valuation lazy load ───────────────────────────────────────
+  async function loadValuation() {
+    document.getElementById('val-content').innerHTML = spinner('Calculating intrinsic value and owner earnings… (~15s)');
+    try {
+      const val = await fetch('/api/valuation').then(r => r.json());
+      renderValuation(val);
+    } catch (err) {
+      document.getElementById('val-content').innerHTML =
+        `<div class="spinner-wrap" style="color:var(--accent-red)">Failed to load valuation data: ${err.message}</div>`;
+    }
+  }
+
+  function renderValuation(data) {
+    const panel = document.getElementById('val-content');
+    if (!data || !data.length) {
+      panel.innerHTML = `<div class="spinner-wrap" style="color:var(--text-muted)">No equity positions found for valuation analysis.</div>`;
+      return;
+    }
+
+    const rows = data.map(v => {
+      const mosColor = v.mos > 0.3 ? 'var(--accent-teal)' : (v.mos > 0 ? 'var(--accent-amber)' : 'var(--accent-red)');
+      const scoreColor = v.quality_score >= 75 ? 'var(--accent-teal)' : (v.quality_score >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)');
+      
+      return `<tr>
+        <td class="td-ticker">${tickerLink(v.ticker)}</td>
+        <td class="td-name">${v.security_name}</td>
+        <td class="td-value">${fmtDollarFull(v.current_price)}</td>
+        <td class="td-value" style="font-weight:600">${fmtDollarFull(v.intrinsic_price)}</td>
+        <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
+        <td class="td-num" style="color:${scoreColor}; font-weight:700">${v.quality_score}</td>
+        <td class="td-num">${(v.roe * 100).toFixed(1)}%</td>
+        <td class="td-num">${v.debt_to_equity.toFixed(2)}</td>
+        <td class="td-value" title="User's proportional share: ${fmtDollar(v.portfolio_owner_earnings)}">${fmtDollarFull(v.owner_earnings_ps)}</td>
+      </tr>`;
+    }).join('');
+
+    panel.innerHTML = `
+      <div class="card">
+        <div class="card-title">Buffett-Style Intrinsic Valuation (Simplified DCF)</div>
+        <div class="hero-sub" style="margin-bottom:1.5rem">
+          Calculates Intrinsic Value based on Owner Earnings projected for 10 years, discounted at the 10-year Treasury rate (min 10%).
+          Quality Score is based on ROE (>15%), Debt/Equity (<0.5), and Margins.
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Ticker</th>
+              <th>Name</th>
+              <th>Price</th>
+              <th>Intrinsic Value</th>
+              <th>Margin of Safety</th>
+              <th>Quality Score</th>
+              <th>ROE</th>
+              <th>D/E</th>
+              <th>Owner Earnings (PS)</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    `;
+    document.querySelectorAll('#panel-valuation table').forEach(makeSortable);
   }
 
   // ── Dividends lazy load (needs market + tax) ─────────────────
@@ -1723,7 +1795,13 @@
       _summaryData = data;
       renderDashboard(data);
       // Re-render current tab if it's not portfolio
-      if (_activeTab === 'dividends') {
+      if (_activeTab === 'risk') {
+        loadRisk();
+      } else if (_activeTab === 'efficiency') {
+        loadEfficiency();
+      } else if (_activeTab === 'valuation') {
+        loadValuation();
+      } else if (_activeTab === 'dividends') {
         loadDividends();
       } else if (_activeTab === 'earnings') {
         loadEarnings();

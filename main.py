@@ -22,6 +22,7 @@ from loader import (
     calculate_institutions,
     enrich_with_market_data,
     calculate_tax_buckets,
+    calculate_valuation_metrics,
 )
 
 # Fail immediately if .gitignore is missing required security patterns
@@ -55,6 +56,7 @@ def _build_cache() -> None:
     _cache.pop("market", None)
     _cache.pop("tax", None)
     _cache.pop("efficiency", None)
+    _cache.pop("valuation", None)
 
 
 _build_cache()
@@ -108,6 +110,15 @@ def efficiency():
     if "efficiency" not in _cache:
         _cache["efficiency"] = calculate_efficiency_metrics(_cache["df_clean"])
     return _cache["efficiency"]
+
+
+@app.get("/api/valuation")
+def valuation():
+    print("API: valuation requested", flush=True)
+    if "valuation" not in _cache:
+        _cache["valuation"] = calculate_valuation_metrics(_cache["summary"]["positions"])
+    print(f"API: valuation returning {len(_cache['valuation'])} items", flush=True)
+    return _cache["valuation"]
 
 
 @app.get("/api/refresh")
