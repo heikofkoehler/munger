@@ -72,17 +72,17 @@ def load_from_monarch(path: str) -> pd.DataFrame:
     try:
         edges = data["data"]["portfolio"]["aggregateHoldings"]["edges"]
         for edge in edges:
-            account_name = edge["node"]["account"]["displayName"]
             for h in edge["node"]["holdings"]:
+                account_name = h.get("account", {}).get("displayName", "Unknown Account")
                 rows.append({
                     "ticker": h.get("ticker"),
-                    "security_name": h.get("securityName"),
+                    "security_name": h.get("name") or h.get("securityName"),
                     "quantity": float(h.get("quantity", 0)),
                     "value": float(h.get("value", 0)),
                     "cost_basis": float(h.get("costBasis")) if h.get("costBasis") else None,
                     "type_display": h.get("typeDisplay"),
                     "account_name": account_name,
-                    "security_id": h.get("securityId"),
+                    "security_id": h.get("id") or h.get("securityId"),
                 })
     except (KeyError, TypeError) as e:
         print(f"Error parsing Monarch JSON: {e}")
