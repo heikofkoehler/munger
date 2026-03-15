@@ -332,6 +332,74 @@ def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
         print(f"Error saving risk snapshot: {e}", file=sys.stderr)
 
 
+def calculate_risk_metrics(df: pd.DataFrame) -> dict:
+    """
+    Calculates the 'True Exposure' for every security by performing look-through 
+    on funds. Also calculates total portfolio cost metrics.
+    """
+    if df.empty:
+        return {"true_exposure": [], "wer": 0, "total_annual_cost": 0}
+
+    total_value = df["value"].sum()
+    exposure = {} # ticker -> {direct: val, indirect: val, name: str}
+
+    # 1. First pass: direct positions
+    for _, row in df.iterrows():
+        ticker = row.get("ticker")
+        if not ticker or ticker in YFINANCE_SKIP_TICKERS:
+            continue
+        
+        if ticker not in exposure:
+            exposure[ticker] = {"direct": 0.0, "indirect": 0.0, "name": row["security_name"]}
+        
+        if row["type_display"] == "Stock":
+            exposure[ticker]["direct"] += row["value"]
+
+    # 2. Second pass: fund look-through
+    fund_costs = []
+    for _, row in df.iterrows():
+        ticker = row.get("ticker")
+        if ticker and row["type_display"] in ["ETF", "Mutual Fund"]:
+            details = get_fund_details(ticker)
+            
+            # Expense Ratio
+            er = details.get("expense_ratio")
+            if er is not None:
+                fund_costs.append(row["value"] * er)
+
+            # Underlying holdings
+            for h in details.get("holdings", []):
+                u_ticker = h["ticker"]
+                if u_ticker not in exposure:
+                    exposure[u_ticker] = {"direct": 0.0, "indirect": 0.0, "name": u_ticker}
+                exposure[u_ticker]["indirect"] += row["value"] * h["weight"]
+
+    # 3. Finalize true exposure
+    results = []
+    for ticker, vals in exposure.items():
+        total_exp = vals["direct"] + vals["indirect"]
+        weight_pct = (total_exp / total_value) * 100
+        if total_exp > 0:
+            results.append({
+                "ticker": ticker,
+                "security_name": vals["name"],
+                "direct_value": round(vals["direct"], 2),
+                "indirect_value": round(vals["indirect"], 2),
+                "total_value": round(total_exp, 2),
+                "weight_pct": round(weight_pct, 2),
+                "flagged": weight_pct > CONC_THRESHOLD
+            })
+
+    total_annual_cost = sum(fund_costs)
+    wer = total_annual_cost / total_value if total_value > 0 else 0
+
+    return {
+        "true_exposure": sorted(results, key=lambda x: x["total_value"], reverse=True),
+        "wer": round(float(wer), 6),
+        "total_annual_cost": round(float(total_annual_cost), 2)
+    }
+
+
 def check_concentration(df: pd.DataFrame) -> list:
     """Identifies positions exceeding the CONC_THRESHOLD."""
     if df.empty:
