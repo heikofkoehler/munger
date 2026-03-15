@@ -674,12 +674,46 @@ def enrich_with_market_data(positions: list) -> list:
         if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS
     }
 
+    # 1. Fetch data for primary tickers
     for t in unique_tickers:
         if t in _market_cache:
             continue
         try:
-            info = yf.Ticker(t).info
+            ticker_obj = yf.Ticker(t)
+            info = ticker_obj.info
             _market_cache[t] = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+            
+            # 2. Look-through for ETFs
+            # If it's an ETF and missing Trailing PE, or if we want better accuracy via look-through
+            if info.get("quoteType") == "ETF":
+                details = get_fund_details(t)
+                if details.get("holdings"):
+                    total_earn_yield = 0.0
+                    weight_covered = 0.0
+                    
+                    # Collect and fetch underlying tickers if not in cache
+                    underlying_tickers = [h["ticker"] for h in details["holdings"] if h["ticker"] not in _market_cache]
+                    for ut in underlying_tickers:
+                        try:
+                            u_info = yf.Ticker(ut).info
+                            _market_cache[ut] = {k: u_info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+                        except Exception:
+                            _market_cache[ut] = {k: None for k in _FIELDS}
+                    
+                    for h in details["holdings"]:
+                        h_ticker = h["ticker"]
+                        h_data = _market_cache.get(h_ticker, {})
+                        pe = h_data.get("trailing_pe")
+                        if pe and pe > 0:
+                            total_earn_yield += (1.0 / pe) * h["weight"]
+                            weight_covered += h["weight"]
+                    
+                    if weight_covered > 0.10: # Only override if we have decent coverage
+                        avg_yield = total_earn_yield / weight_covered
+                        if avg_yield > 0:
+                            _market_cache[t]["trailing_pe"] = 1.0 / avg_yield
+                            print(f"Look-through: ETF {t} calculated PE {1.0/avg_yield:.2f} via {weight_covered:.1%} coverage", flush=True)
+
         except Exception:
             _market_cache[t] = {k: None for k in _FIELDS}
 

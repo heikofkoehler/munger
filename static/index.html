@@ -1762,13 +1762,15 @@
           </tr>`;
         }
         
+        const peDisplay = p.trailing_pe > 0 ? (type === 'ETF' ? `<i title="Estimated via look-through analysis of top holdings">${fmtNum(p.trailing_pe)}*</i>` : fmtNum(p.trailing_pe)) : '—';
+        
         return `<tr>
           <td class="td-ticker">${ticker}</td>
           <td class="td-name">${p.security_name || '—'}</td>
           <td class="td-value">${fmtDollar(p.value)}</td>
           <td>${typeBadge}</td>
           <td class="td-muted">${p.sector || '—'}</td>
-          <td class="td-num">${p.trailing_pe > 0 ? fmtNum(p.trailing_pe) : '—'}</td>
+          <td class="td-num">${peDisplay}</td>
           <td class="td-num">${p.forward_pe > 0 ? fmtNum(p.forward_pe) : '—'}</td>
           <td class="td-num" style="color:var(--accent-blue); font-weight:600">${p._earnings > 0 ? fmtDollar(p._earnings) : '—'}</td>
           <td class="td-num">${fmtMktCap(p.market_cap)}</td>
@@ -1809,7 +1811,10 @@
         </div>
       </div>
 
-      ${sections}`;
+      ${sections}
+      <div class="hero-sub" style="text-align:center; margin-top:1rem; font-size:11px">
+        * ETF P/E and earnings figures are estimated using look-through analysis of top underlying holdings.
+      </div>`;
     document.querySelectorAll('#earn-content table').forEach(makeSortable);
   }
 
