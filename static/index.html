@@ -807,12 +807,17 @@
 
       if (v.quality_score !== -1) {
         scoreDisplay = v.quality_score;
-        waccDisplay = (v.wacc * 100).toFixed(2) + '%';
-        gDisplay = (v.g * 100).toFixed(1) + '%';
+        const dispWacc = v.wacc || v.discount_rate || 0.10;
+        const dispG = v.g || v.growth_rate || 0.05;
+        const dispFcf = v.fcf0 || v.owner_earnings_ps || 0;
+        
+        waccDisplay = (dispWacc * 100).toFixed(2) + '%';
+        gDisplay = (dispG * 100).toFixed(1) + '%';
+        
         scoreTooltip = [
           (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
           (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
-          '✓ FCF0: ' + fmtDollar(v.fcf0)
+          '✓ Base: ' + fmtDollar(dispFcf)
         ].join('\n');
       }
 
@@ -825,7 +830,7 @@
         <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${scoreDisplay}</td>
         <td class="td-num">${waccDisplay}</td>
         <td class="td-num">${gDisplay}</td>
-        <td class="td-value">${fmtDollar(v.owner_earnings_ps)}</td>
+        <td class="td-value">${fmtDollar(v.fcf0 || v.owner_earnings_ps || 0)}</td>
       </tr>`;
     }).join('');
 
@@ -898,20 +903,42 @@
     const tg = v.terminal_growth_rate || 0.02;
     
     // We are currently running the standard DCF logic which provides owner_earnings_ps
-    // If fcf0 is not present, use owner_earnings_ps and simulate shares=1
     const fcf0 = v.fcf0 || v.owner_earnings_ps || 0;
     const currentPrice = v.current_price || 0;
+
+    // Use old DCF 10-year logic for fallback
+    const calcLegacyIntrinsic = (oe, r, g, term_g) => {
+        let pvSum = 0;
+        let currentOe = oe;
+        for (let i = 1; i <= 10; i++) {
+            currentOe *= (1 + g);
+            pvSum += currentOe / Math.pow(1 + r, i);
+        }
+        const terminalVal = (currentOe * (1 + term_g)) / (r - term_g);
+        const pvTerminal = terminalVal / Math.pow(1 + r, 10);
+        return pvSum + pvTerminal;
+    };
     
-    // Fallback if the FCF model isn't active
-    const cash = v.cash || 0;
-    const debt = v.d || 0;
-    const shares = v.shares || 1;
+    // Determine which mode we're in
+    const isLegacy = typeof v.wacc === 'undefined';
 
     const gRange = [];
-    for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.005));
+    if (isLegacy) {
+      // Legacy steps: 1%, 3%, 5%, 8%, 12%
+      gRange.push(baseG - 0.04, baseG - 0.02, baseG, baseG + 0.03, baseG + 0.07);
+    } else {
+      // New steps: 0.5% increments
+      for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.005));
+    }
 
     const waccRange = [];
-    for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
+    if (isLegacy) {
+      // Legacy steps: 1% increments
+      for (let i = -2; i <= 2; i++) waccRange.push(baseWacc + (i * 0.01));
+    } else {
+      // New steps: 0.25% increments
+      for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
+    }
 
     let tableHtml = `<table class="sens-table">`;
     tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (R) ↓ \\ Growth (G) →</th>`;
@@ -924,7 +951,13 @@
         if (wacc <= 0) return;
         tableHtml += `<tr><th class="sens-header-g">${(wacc * 100).toFixed(2)}%</th>`;
         gRange.forEach(g => {
-            const val = calcIntrinsic(fcf0, wacc, g, tg, cash, debt, shares);
+            let val = 0;
+            if (isLegacy) {
+                val = calcLegacyIntrinsic(fcf0, wacc, g, tg);
+            } else {
+                val = calcIntrinsic(fcf0, wacc, g, tg, v.cash || 0, v.d || 0, v.shares || 1);
+            }
+            
             const isBase = Math.abs(wacc - baseWacc) < 0.0001 && Math.abs(g - baseG) < 0.0001;
             const ratio = currentPrice / val;
             let bgColor = 'transparent';

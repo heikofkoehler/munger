@@ -3,11 +3,12 @@ main.py — Munger FastAPI backend
 
 Serves the portfolio dashboard at http://localhost:8000.
 Run with: uvicorn main:app --reload
-# Force reload for valuation fix v2
 """
 
-from fastapi import FastAPI
-from fastapi.responses import RedirectResponse, FileResponse
+import logging
+import traceback
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from loader import (
@@ -26,6 +27,10 @@ from loader import (
     calculate_valuation_metrics,
 )
 
+# Initialize Logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Fail immediately if .gitignore is missing required security patterns
 check_gitignore()
 
@@ -34,32 +39,48 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _cache: dict = {}
 
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"Global error: {exc}")
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal Server Error", "detail": str(exc)},
+    )
 
 def _build_cache() -> None:
-    df_raw = load()
-    df = normalize_asset_class(deduplicate(df_raw))
-    risk = calculate_risk_metrics(df)
-    
-    _cache["summary"] = {
-        **calculate_metrics(df),
-        "institutions": calculate_institutions(df_raw),
-        "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
-        "risk_threshold": risk.get("threshold", 10.0),
-    }
-    _cache["df_clean"] = df
-    _cache["df_raw"] = df_raw
-    _cache["risk"] = risk
-    
-    # Persistent snapshot for historical trend analysis
-    save_risk_snapshot(risk)
-    
-    # Clear other lazy caches
-    _cache.pop("market", None)
-    _cache.pop("tax", None)
-    _cache.pop("efficiency", None)
-    _cache.pop("valuation", None)
+    try:
+        logger.info("Building cache...")
+        df_raw = load()
+        df = normalize_asset_class(deduplicate(df_raw))
+        risk = calculate_risk_metrics(df)
+        
+        _cache["summary"] = {
+            **calculate_metrics(df),
+            "institutions": calculate_institutions(df_raw),
+            "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
+            "risk_threshold": 10.0,
+        }
+        _cache["df_clean"] = df
+        _cache["df_raw"] = df_raw
+        _cache["risk"] = risk
+        
+        save_risk_snapshot(risk)
+        
+        # Clear other lazy caches
+        _cache.pop("market", None)
+        _cache.pop("tax", None)
+        _cache.pop("efficiency", None)
+        _cache.pop("valuation", None)
+        logger.info("Cache built successfully.")
+    except Exception as e:
+        logger.error(f"Error building cache: {e}")
+        logger.error(traceback.format_exc())
+        # We don't raise here to allow the server to start even if data loading fails,
+        # but endpoints will return 500 with details.
+        _cache["summary"] = None
 
-
+# Initial build
 _build_cache()
 
 
@@ -70,7 +91,9 @@ def root():
 
 @app.get("/api/summary")
 def summary():
-    # Return basic summary; frontend can request risk/market later
+    if not _cache.get("summary"):
+        return JSONResponse(status_code=500, content={"message": "Cache not initialized. Check logs."})
+    
     s = dict(_cache["summary"])
     if "risk" in _cache:
         s["risk"] = _cache["risk"]
@@ -115,14 +138,14 @@ def efficiency():
 
 @app.get("/api/valuation")
 def valuation():
-    print("API: valuation requested", flush=True)
+    logger.info("API: valuation requested")
     if "valuation" not in _cache:
         _cache["valuation"] = calculate_valuation_metrics(_cache["summary"]["positions"])
-    print(f"API: valuation returning {len(_cache['valuation'])} items", flush=True)
+    logger.info(f"API: valuation returning {len(_cache['valuation'])} items")
     return _cache["valuation"]
 
 
 @app.get("/api/refresh")
 def refresh():
     _build_cache()
-    return _cache["summary"]
+    return _cache.get("summary") or {}
