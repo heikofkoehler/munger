@@ -163,7 +163,7 @@ def calculate_metrics(df: pd.DataFrame) -> dict:
     
     positions = df.to_dict("records")
     for p in positions:
-        p["weight_pct"] = (p["value"] / total_value) * 100
+        p["weight_pct"] = float((p["value"] / total_value) * 100)
 
     return {
         "total_value": float(total_value),
@@ -377,17 +377,17 @@ def calculate_risk_metrics(df: pd.DataFrame) -> dict:
     # 3. Finalize true exposure
     results = []
     for ticker, vals in exposure.items():
-        total_exp = vals["direct"] + vals["indirect"]
+        total_exp = float(vals["direct"] + vals["indirect"])
         weight_pct = (total_exp / total_value) * 100
         if total_exp > 0:
             results.append({
                 "ticker": ticker,
                 "security_name": vals["name"],
-                "direct_value": round(vals["direct"], 2),
-                "indirect_value": round(vals["indirect"], 2),
+                "direct_value": round(float(vals["direct"]), 2),
+                "indirect_value": round(float(vals["indirect"]), 2),
                 "total_value": round(total_exp, 2),
-                "weight_pct": round(weight_pct, 2),
-                "flagged": weight_pct > CONC_THRESHOLD
+                "weight_pct": round(float(weight_pct), 2),
+                "flagged": bool(weight_pct > CONC_THRESHOLD)
             })
 
     total_annual_cost = sum(fund_costs)
