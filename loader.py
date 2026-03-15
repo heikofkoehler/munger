@@ -425,10 +425,10 @@ def calculate_sector_allocation(positions: list) -> dict:
     return {k: (v / total) * 100 for k, v in sectors.items()}
 
 
-def calculate_institutions(positions: list) -> dict:
+def calculate_institutions(positions: list) -> list:
     """Finds top institutional owners for the portfolio's top positions."""
     # Placeholder for future enhancement (e.g. scraping or premium API)
-    return {}
+    return []
 
 
 # ---------------------------------------------------------------------------
