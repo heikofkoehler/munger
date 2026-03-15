@@ -940,7 +940,14 @@
       for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
     }
 
-    let tableHtml = `<table class="sens-table">`;
+    let assumptionText = '';
+    if (isLegacy) {
+      assumptionText = `Base WACC (R): <strong>${(baseWacc*100).toFixed(2)}%</strong> · Base Growth (G): <strong>${(baseG*100).toFixed(2)}%</strong> · Terminal Growth: <strong>${(tg*100).toFixed(2)}%</strong>`;
+    } else {
+      assumptionText = `Base WACC (R): <strong>${(baseWacc*100).toFixed(2)}%</strong> · Base Growth (G): <strong>${(baseG*100).toFixed(2)}%</strong> · Terminal Growth: <strong>${(tg*100).toFixed(2)}%</strong>`;
+    }
+
+    let tableHtml = `<div style="font-size:12px; margin-bottom: 1rem; color:var(--text-secondary)">${assumptionText}</div><table class="sens-table">`;
     tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (R) ↓ \\ Growth (G) →</th>`;
     gRange.forEach(g => {
         tableHtml += `<th class="sens-header-r">${(g * 100).toFixed(1)}%</th>`;
