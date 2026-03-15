@@ -802,18 +802,17 @@
       
       let scoreTooltip = 'N/A for ETFs';
       let scoreDisplay = '—';
-      let roeDisplay = '—';
-      let deDisplay = '—';
+      let waccDisplay = '—';
+      let gDisplay = '—';
 
       if (v.quality_score !== -1) {
         scoreDisplay = v.quality_score;
-        roeDisplay = (v.roe * 100).toFixed(1) + '%';
-        deDisplay = v.debt_to_equity.toFixed(2);
+        waccDisplay = (v.wacc * 100).toFixed(2) + '%';
+        gDisplay = (v.g * 100).toFixed(1) + '%';
         scoreTooltip = [
           (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
           (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
-          (v.gross_margin > 0.4 ? '✓' : '✗') + ' Gross Margin > 40% (' + (v.gross_margin*100).toFixed(1) + '%)',
-          (v.net_margin > 0.1 ? '✓' : '✗') + ' Net Margin > 10% (' + (v.net_margin*100).toFixed(1) + '%)'
+          '✓ FCF0: ' + fmtDollar(v.fcf0)
         ].join('\n');
       }
 
@@ -824,18 +823,18 @@
         <td class="td-value" style="font-weight:600; cursor:pointer; color:${mosColor}" onclick="showSensitivity('${v.ticker}')" title="Click for Sensitivity Analysis">${fmtDollarFull(v.intrinsic_price)}</td>
         <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
         <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${scoreDisplay}</td>
-        <td class="td-num">${roeDisplay}</td>
-        <td class="td-num">${deDisplay}</td>
-        <td class="td-value" title="User's proportional share: ${fmtDollar(v.portfolio_owner_earnings)}">${fmtDollarFull(v.owner_earnings_ps)}</td>
+        <td class="td-num">${waccDisplay}</td>
+        <td class="td-num">${gDisplay}</td>
+        <td class="td-value">${fmtDollar(v.owner_earnings_ps)}</td>
       </tr>`;
     }).join('');
 
     panel.innerHTML = `
       <div class="card">
-        <div class="card-title">Buffett-Style Intrinsic Valuation (Simplified DCF)</div>
+        <div class="card-title">FCF-WACC Intrinsic Valuation (2-Stage DCF)</div>
         <div class="hero-sub" style="margin-bottom:1.5rem">
-          Calculates Intrinsic Value based on Owner Earnings projected for 10 years, discounted at the 10-year Treasury rate (min 5.8%) plus a **4.38% Equity Risk Premium**.
-          Quality Score is based on ROE (>15%), Debt/Equity (<0.5), and Margins. <i>ETF Owner Earnings are estimated via X-Ray look-through.</i>
+          Calculates Intrinsic Value based on Free Cash Flow projected for 5 years, discounted at the calculated WACC. 
+          Uses Equity Value adjustment (Cash - Debt). Click Intrinsic Value for Sensitivity Matrix.
         </div>
         <table>
           <thead>
@@ -846,9 +845,9 @@
               <th>Intrinsic Value</th>
               <th>Margin of Safety</th>
               <th>Quality Score</th>
-              <th>ROE</th>
-              <th>D/E</th>
-              <th>Owner Earnings (PS)</th>
+              <th>WACC (R)</th>
+              <th>Growth (G)</th>
+              <th>FCF (PS)</th>
             </tr>
           </thead>
           <tbody>${rows}</tbody>
@@ -877,62 +876,65 @@
     title.innerText = `Sensitivity Analysis: ${v.ticker}`;
     modal.classList.add('active');
 
-    // DCF Calculation Logic (Matches loader.py)
-    const calcDCF = (oe, r, g, tg) => {
-        let pvSum = 0;
-        let currentOe = oe;
-        for (let i = 1; i <= 10; i++) {
-            currentOe *= (1 + g);
-            pvSum += currentOe / Math.pow(1 + r, i);
+    const calcIntrinsic = (fcf0, wacc, g, tg, cash, debt, shares) => {
+        if (shares <= 0) return 0;
+        let pvStage1 = 0;
+        let fcf = fcf0;
+        for (let t = 1; t <= 5; t++) {
+            fcf *= (1 + g);
+            pvStage1 += fcf / Math.pow(1 + wacc, t);
         }
-        const terminalVal = (currentOe * (1 + tg)) / (r - tg);
-        const pvTerminal = terminalVal / Math.pow(1 + r, 10);
-        return pvSum + pvTerminal;
+        let cur_tg = tg;
+        if (cur_tg >= wacc) cur_tg = wacc - 0.005;
+        const tv = (fcf * (1 + cur_tg)) / (wacc - cur_tg);
+        const pvTv = tv / Math.pow(1 + wacc, 5);
+        const ev = pvStage1 + pvTv;
+        const eqVal = ev + cash - debt;
+        return eqVal / shares;
     };
 
-    // Range: r +/- 2%, g +/- 2%
-    const baseR = v.discount_rate;
-    const baseG = v.growth_rate;
+    const baseWacc = v.wacc || v.discount_rate || 0.10;
+    const baseG = v.g || v.growth_rate || 0.05;
     const tg = v.terminal_growth_rate || 0.02;
-    const oe = v.owner_earnings_ps;
-    const currentPrice = v.current_price;
+    
+    // We are currently running the standard DCF logic which provides owner_earnings_ps
+    // If fcf0 is not present, use owner_earnings_ps and simulate shares=1
+    const fcf0 = v.fcf0 || v.owner_earnings_ps || 0;
+    const currentPrice = v.current_price || 0;
+    
+    // Fallback if the FCF model isn't active
+    const cash = v.cash || 0;
+    const debt = v.d || 0;
+    const shares = v.shares || 1;
 
-    const rRange = [baseR - 0.02, baseR - 0.01, baseR, baseR + 0.01, baseR + 0.02];
-    const gRange = [baseG - 0.04, baseG - 0.02, baseG, baseG + 0.03, baseG + 0.07]; // Range up to 12%
+    const gRange = [];
+    for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.005));
+
+    const waccRange = [];
+    for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
 
     let tableHtml = `<table class="sens-table">`;
-    
-    // Header Row (Growth Rates)
     tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (R) ↓ \\ Growth (G) →</th>`;
     gRange.forEach(g => {
         tableHtml += `<th class="sens-header-r">${(g * 100).toFixed(1)}%</th>`;
     });
     tableHtml += `</tr></thead><tbody>`;
 
-    rRange.forEach(r => {
-        tableHtml += `<tr><th class="sens-header-g">${(r * 100).toFixed(1)}%</th>`;
+    waccRange.forEach(wacc => {
+        if (wacc <= 0) return;
+        tableHtml += `<tr><th class="sens-header-g">${(wacc * 100).toFixed(2)}%</th>`;
         gRange.forEach(g => {
-            const val = calcDCF(oe, r, g, tg);
-            const isBase = Math.abs(r - baseR) < 0.001 && Math.abs(g - baseG) < 0.001;
-            
-            // Heatmap color based on Price/Value
+            const val = calcIntrinsic(fcf0, wacc, g, tg, cash, debt, shares);
+            const isBase = Math.abs(wacc - baseWacc) < 0.0001 && Math.abs(g - baseG) < 0.0001;
             const ratio = currentPrice / val;
             let bgColor = 'transparent';
-            
-            if (ratio < 1) { // Undervalued (Teal)
-                const intensity = Math.min(0.8, (1 - ratio) * 2);
-                bgColor = `rgba(0, 212, 170, ${intensity})`;
-            } else { // Overvalued (Red)
-                const intensity = Math.min(0.8, (ratio - 1) * 2);
-                bgColor = `rgba(224, 92, 92, ${intensity})`;
-            }
-
+            if (ratio < 1) bgColor = `rgba(0, 212, 170, ${Math.min(0.8, (1 - ratio) * 2)})`;
+            else bgColor = `rgba(224, 92, 92, ${Math.min(0.8, (ratio - 1) * 2)})`;
             const cellClass = isBase ? 'sens-cell sens-base' : 'sens-cell';
-            tableHtml += `<td class="${cellClass}" style="background-color:${bgColor}" title="r=${(r*100).toFixed(1)}%, g=${(g*100).toFixed(1)}%">${fmtDollarFull(val)}</td>`;
+            tableHtml += `<td class="${cellClass}" style="background-color:${bgColor}">${fmtDollarFull(val)}</td>`;
         });
         tableHtml += `</tr>`;
     });
-
     tableHtml += `</tbody></table>`;
     content.innerHTML = tableHtml;
   }
