@@ -206,7 +206,7 @@ def enrich_with_market_data(positions: list) -> list:
     # Collect unique tickers to fetch
     unique_tickers = {
         p["ticker"] for p in positions
-        if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS
+        if p.get("ticker") and isinstance(p["ticker"], str) and p["ticker"].lower() != "nan" and p["ticker"] not in YFINANCE_SKIP_TICKERS
     }
 
     # 1. Fetch data for primary tickers
@@ -282,6 +282,9 @@ def get_fund_details(ticker: str) -> dict:
     import yfinance as yf
     import pandas as pd
 
+    if not ticker or not isinstance(ticker, str) or ticker.lower() == "nan":
+        return {"expense_ratio": None, "holdings": []}
+
     if ticker in _fund_cache:
         return _fund_cache[ticker]
 
@@ -324,7 +327,7 @@ def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
                           (timestamp TEXT, wer REAL, total_annual_cost REAL)''')
         
         now = datetime.now().isoformat()
-        cursor.execute("INSERT INTO risk_snapshots VALUES (?, ?, ?)",
+        cursor.execute("INSERT INTO risk_snapshots (timestamp, wer, total_annual_cost) VALUES (?, ?, ?)",
                        (now, risk_data["wer"], risk_data["total_annual_cost"]))
         conn.commit()
         conn.close()
@@ -346,7 +349,7 @@ def calculate_risk_metrics(df: pd.DataFrame) -> dict:
     # 1. First pass: direct positions
     for _, row in df.iterrows():
         ticker = row.get("ticker")
-        if not ticker or ticker in YFINANCE_SKIP_TICKERS:
+        if not ticker or not isinstance(ticker, str) or ticker.lower() == "nan" or ticker in YFINANCE_SKIP_TICKERS:
             continue
         
         if ticker not in exposure:
@@ -359,7 +362,7 @@ def calculate_risk_metrics(df: pd.DataFrame) -> dict:
     fund_costs = []
     for _, row in df.iterrows():
         ticker = row.get("ticker")
-        if ticker and row["type_display"] in ["ETF", "Mutual Fund"]:
+        if ticker and isinstance(ticker, str) and ticker.lower() != "nan" and row["type_display"] in ["ETF", "Mutual Fund"]:
             details = get_fund_details(ticker)
             
             # Expense Ratio
@@ -447,7 +450,7 @@ def calculate_efficiency_metrics(df: pd.DataFrame) -> dict:
     
     for _, row in df.iterrows():
         ticker = row.get("ticker")
-        if ticker and row.get("type_display") in ["ETF", "Mutual Fund"]:
+        if ticker and isinstance(ticker, str) and ticker.lower() != "nan" and row.get("type_display") in ["ETF", "Mutual Fund"]:
             details = get_fund_details(ticker)
             er = details.get("expense_ratio")
             if er is not None:
@@ -641,7 +644,7 @@ def calculate_valuation_metrics(positions: list) -> list:
     unique_tickers = set()
     for p in positions:
         ticker = p.get("ticker")
-        if not ticker or ticker in YFINANCE_SKIP_TICKERS or ticker.startswith("UNKNOWN"):
+        if not ticker or not isinstance(ticker, str) or ticker.lower() == "nan" or ticker in YFINANCE_SKIP_TICKERS or ticker.startswith("UNKNOWN"):
             continue
         is_equity = p.get("type_display") in ["Stock", "Equity", "Equity / ETF", "ETF"]
         if not is_equity and p.get("type_display") not in ["Cash", "Fixed Income", "Mutual Fund"]:
