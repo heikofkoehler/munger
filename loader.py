@@ -956,7 +956,8 @@ def calculate_valuation_metrics(positions: list) -> list:
                 # Basic DCF for the ETF as a whole
                 growth_rate = 0.05
                 terminal_growth_rate = 0.02
-                discount_rate = max(rf_rate, 0.058) + 0.04
+                risk_premium = 0.0438 # 4.38% Equity Risk Premium (Market Implied March 2026)
+                discount_rate = max(rf_rate, 0.058) + risk_premium
                 
                 pv_sum = 0
                 current_oe = owner_earnings_ps
@@ -1050,7 +1051,7 @@ def calculate_valuation_metrics(positions: list) -> list:
             net_margin = info.get("profitMargins") or 0
             
             # Simplified DCF (10 years)
-            risk_premium = 0.04 # 4% Equity Risk Premium (Professional Standard)
+            risk_premium = 0.0438 # 4.38% Equity Risk Premium (Market Implied March 2026)
             discount_rate = max(rf_rate, 0.058) + risk_premium # Rf (min 5.8%) + ERP
             
             # Sum of PV of Owner Earnings for 10 years
