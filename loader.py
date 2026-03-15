@@ -796,6 +796,42 @@ def calculate_tax_buckets(df_raw) -> dict:
 _valuation_cache: dict = {}
 
 
+def _calculate_owner_earnings(ticker_symbol: str):
+    """
+    Fetch financial statements and calculate total Owner Earnings for a company.
+    Returns: owner_earnings (float) or None if unavailable
+    """
+    import yfinance as yf
+    try:
+        t = yf.Ticker(ticker_symbol.replace("-", "."))
+        inc = t.income_stmt
+        cf = t.cashflow
+
+        if inc.empty or cf.empty:
+            t = yf.Ticker(ticker_symbol)
+            inc = t.income_stmt
+            cf = t.cashflow
+            if inc.empty or cf.empty:
+                return None
+
+        def get_val(df, keys):
+            for k in keys:
+                if k in df.index and not df.loc[k].empty:
+                    return float(df.loc[k].iloc[0])
+            return 0.0
+
+        net_income = get_val(inc, ["Net Income", "Net Income Common Stockholders"])
+        if net_income == 0:
+            return None
+        
+        dep = get_val(cf, ["Depreciation And Amortization", "Depreciation Amortization Depletion", "Reconciled Depreciation"])
+        capex = abs(get_val(cf, ["Capital Expenditure", "Purchase Of PPE", "Purchase Of Business"]))
+        maint_capex = min(capex, dep) if dep > 0 else capex
+        
+        return net_income + dep - maint_capex
+    except Exception:
+        return None
+
 def calculate_valuation_metrics(positions: list) -> list:
     """
     Calculate Buffett-style valuation metrics for stocks in the portfolio.
@@ -820,10 +856,9 @@ def calculate_valuation_metrics(positions: list) -> list:
         if not ticker or ticker in YFINANCE_SKIP_TICKERS or ticker.startswith("UNKNOWN"):
             continue
         
-        # Consider anything as "Stock" if it's explicitly labelled or if it's not Cash/Fixed Income/ETF
-        is_equity = p.get("type_display") in ["Stock", "Equity", "Equity / ETF"]
-        # Fallback: if it's not Cash/ETF/Mutual Fund and has a valid-looking ticker
-        if not is_equity and p.get("type_display") not in ["Cash", "Fixed Income", "ETF", "Mutual Fund"]:
+        # Consider anything as "Stock" or "ETF" for valuation
+        is_equity = p.get("type_display") in ["Stock", "Equity", "Equity / ETF", "ETF"]
+        if not is_equity and p.get("type_display") not in ["Cash", "Fixed Income", "Mutual Fund"]:
             is_equity = True
             
         if is_equity:
@@ -837,6 +872,99 @@ def calculate_valuation_metrics(positions: list) -> list:
             results.append(_valuation_cache[ticker])
             continue
         
+        # Check if it's an ETF first to handle look-through
+        is_fund = any(p.get("ticker") == ticker and p.get("type_display") == "ETF" for p in positions)
+        
+        if is_fund:
+            try:
+                t = yf.Ticker(ticker)
+                # Ensure it's actually an ETF with holdings
+                if not hasattr(t, "funds_data") or t.funds_data.top_holdings is None or t.funds_data.top_holdings.empty:
+                    print(f"Valuation: skipping ETF {ticker} (no top holdings data)", flush=True)
+                    continue
+
+                holdings = t.funds_data.top_holdings
+                total_underlying_oe = 0.0
+                weight_covered = 0.0
+                
+                print(f"Valuation: starting look-through for ETF {ticker}...", flush=True)
+                for underlying_ticker, row in holdings.iterrows():
+                    weight = row.get("Holding Percent") or row.get("Weight") or 0.0
+                    if weight <= 0: continue
+                    
+                    u_oe = _calculate_owner_earnings(str(underlying_ticker))
+                    if u_oe is not None:
+                        total_underlying_oe += u_oe * weight
+                        weight_covered += weight
+                
+                if weight_covered == 0:
+                    continue
+
+                # Extrapolate to 100% of the fund to estimate Total ETF Owner Earnings
+                extrapolated_oe = total_underlying_oe / weight_covered
+                
+                # Get ETF shares outstanding to calculate Per Share
+                shares = t.info.get("sharesOutstanding") or t.info.get("impliedSharesOutstanding")
+                if not shares or shares <= 0:
+                    # Fallback: estimate shares from Total Assets / NAV
+                    nav = t.info.get("navPrice") or t.info.get("previousClose")
+                    assets = t.info.get("totalAssets")
+                    if nav and assets:
+                        shares = assets / nav
+                
+                if not shares or shares <= 0:
+                    print(f"Valuation: skipping ETF {ticker} (cannot determine shares)", flush=True)
+                    continue
+
+                owner_earnings_ps = extrapolated_oe / shares
+                current_price = t.info.get("navPrice") or t.info.get("regularMarketPrice") or t.info.get("previousClose") or 0
+
+                # Basic DCF for the ETF as a whole
+                growth_rate = 0.05
+                terminal_growth_rate = 0.02
+                discount_rate = max(rf_rate, 0.058) + 0.04
+                
+                pv_sum = 0
+                current_oe = owner_earnings_ps
+                for i in range(1, 11):
+                    current_oe *= (1 + growth_rate)
+                    pv_sum += current_oe / ((1 + discount_rate) ** i)
+                
+                terminal_val = (current_oe * (1 + terminal_growth_rate)) / (discount_rate - terminal_growth_rate)
+                pv_terminal = terminal_val / ((1 + discount_rate) ** 10)
+                
+                intrinsic_price = pv_sum + pv_terminal
+                mos = (1 - (current_price / intrinsic_price)) if intrinsic_price > 0 else -1
+
+                pos_match = [p for p in positions if p.get("ticker") == ticker]
+                total_qty = sum(p.get("quantity") or 0 for p in pos_match)
+                portfolio_owner_earnings = total_qty * owner_earnings_ps
+
+                val_data = {
+                    "ticker": ticker,
+                    "security_name": t.info.get("shortName") or ticker,
+                    "current_price": round(float(current_price), 2),
+                    "intrinsic_price": round(float(intrinsic_price), 2),
+                    "mos": round(float(mos), 4),
+                    "quality_score": -1, # N/A for ETFs
+                    "roe": 0,
+                    "debt_to_equity": 0,
+                    "owner_earnings_ps": round(float(owner_earnings_ps), 2),
+                    "portfolio_owner_earnings": round(float(portfolio_owner_earnings), 2),
+                    "discount_rate": round(float(discount_rate), 4),
+                    "growth_rate": round(float(growth_rate), 4),
+                    "terminal_growth_rate": round(float(terminal_growth_rate), 4),
+                    "gross_margin": 0,
+                    "net_margin": 0,
+                }
+                _valuation_cache[ticker] = val_data
+                results.append(val_data)
+                continue
+            except Exception as e:
+                print(f"Error valuing ETF {ticker}: {e}", file=sys.stderr)
+                continue
+
+        # --- Standard Equity Valuation ---
         # Default assumptions
         growth_rate = 0.05
         terminal_growth_rate = 0.02
@@ -857,10 +985,14 @@ def calculate_valuation_metrics(positions: list) -> list:
 
             inc = t.income_stmt
             bal = t.balance_sheet
-            cf = t.cashflow
 
-            if inc.empty or bal.empty or cf.empty:
+            if inc.empty or bal.empty:
                 print(f"Valuation: missing financial statements for {ticker}", flush=True)
+                continue
+
+            owner_earnings = _calculate_owner_earnings(ticker)
+            if owner_earnings is None:
+                print(f"Valuation: skipping {ticker} due to missing Owner Earnings data", flush=True)
                 continue
 
             # Latest annual figures (first column)
@@ -871,19 +1003,6 @@ def calculate_valuation_metrics(positions: list) -> list:
                 return 0.0
 
             net_income = get_val(inc, ["Net Income", "Net Income Common Stockholders"])
-            if net_income == 0:
-                print(f"Valuation: skipping {ticker} due to missing Net Income", flush=True)
-                continue
-            
-            # Depreciation & Amortization
-            dep = get_val(cf, ["Depreciation And Amortization", "Depreciation Amortization Depletion", "Reconciled Depreciation"])
-                
-            # CapEx
-            capex = abs(get_val(cf, ["Capital Expenditure", "Purchase Of PPE", "Purchase Of Business"]))
-            
-            # Maintenance CapEx estimate: Min of total CapEx and Depreciation (conservative approximation)
-            maint_capex = min(capex, dep) if dep > 0 else capex
-            owner_earnings = net_income + dep - maint_capex
             
             # Equity & Debt
             equity = get_val(bal, ["Stockholders Equity", "Common Stock Equity", "Total Equity Gross Minority Interest"])

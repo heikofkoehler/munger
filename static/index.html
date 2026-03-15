@@ -798,14 +798,24 @@
 
     const rows = data.map(v => {
       const mosColor = v.mos > 0.3 ? 'var(--accent-teal)' : (v.mos > 0 ? 'var(--accent-amber)' : 'var(--accent-red)');
-      const scoreColor = v.quality_score >= 75 ? 'var(--accent-teal)' : (v.quality_score >= 50 ? 'var(--accent-amber)' : 'var(--accent-red)');
+      const scoreColor = v.quality_score >= 75 ? 'var(--accent-teal)' : (v.quality_score >= 50 ? 'var(--accent-amber)' : (v.quality_score === -1 ? 'var(--text-muted)' : 'var(--accent-red)'));
       
-      const scoreTooltip = [
-        (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
-        (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
-        (v.gross_margin > 0.4 ? '✓' : '✗') + ' Gross Margin > 40% (' + (v.gross_margin*100).toFixed(1) + '%)',
-        (v.net_margin > 0.1 ? '✓' : '✗') + ' Net Margin > 10% (' + (v.net_margin*100).toFixed(1) + '%)'
-      ].join('\n');
+      let scoreTooltip = 'N/A for ETFs';
+      let scoreDisplay = '—';
+      let roeDisplay = '—';
+      let deDisplay = '—';
+
+      if (v.quality_score !== -1) {
+        scoreDisplay = v.quality_score;
+        roeDisplay = (v.roe * 100).toFixed(1) + '%';
+        deDisplay = v.debt_to_equity.toFixed(2);
+        scoreTooltip = [
+          (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
+          (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
+          (v.gross_margin > 0.4 ? '✓' : '✗') + ' Gross Margin > 40% (' + (v.gross_margin*100).toFixed(1) + '%)',
+          (v.net_margin > 0.1 ? '✓' : '✗') + ' Net Margin > 10% (' + (v.net_margin*100).toFixed(1) + '%)'
+        ].join('\n');
+      }
 
       return `<tr>
         <td class="td-ticker">${tickerLink(v.ticker)}</td>
@@ -813,9 +823,9 @@
         <td class="td-value">${fmtDollarFull(v.current_price)}</td>
         <td class="td-value" style="font-weight:600; cursor:pointer; color:${mosColor}" onclick="showSensitivity('${v.ticker}')" title="Click for Sensitivity Analysis">${fmtDollarFull(v.intrinsic_price)}</td>
         <td class="td-num" style="color:${mosColor}; font-weight:700">${(v.mos * 100).toFixed(1)}%</td>
-        <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${v.quality_score}</td>
-        <td class="td-num">${(v.roe * 100).toFixed(1)}%</td>
-        <td class="td-num">${v.debt_to_equity.toFixed(2)}</td>
+        <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${scoreDisplay}</td>
+        <td class="td-num">${roeDisplay}</td>
+        <td class="td-num">${deDisplay}</td>
         <td class="td-value" title="User's proportional share: ${fmtDollar(v.portfolio_owner_earnings)}">${fmtDollarFull(v.owner_earnings_ps)}</td>
       </tr>`;
     }).join('');
@@ -825,7 +835,7 @@
         <div class="card-title">Buffett-Style Intrinsic Valuation (Simplified DCF)</div>
         <div class="hero-sub" style="margin-bottom:1.5rem">
           Calculates Intrinsic Value based on Owner Earnings projected for 10 years, discounted at the 10-year Treasury rate (min 5.8%) plus a **4.0% Equity Risk Premium**.
-          Quality Score is based on ROE (>15%), Debt/Equity (<0.5), and Margins.
+          Quality Score is based on ROE (>15%), Debt/Equity (<0.5), and Margins. <i>ETF Owner Earnings are estimated via X-Ray look-through.</i>
         </div>
         <table>
           <thead>
