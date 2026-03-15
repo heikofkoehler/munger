@@ -807,17 +807,12 @@
 
       if (v.quality_score !== -1) {
         scoreDisplay = v.quality_score;
-        const dispWacc = v.wacc || v.discount_rate || 0.10;
-        const dispG = v.g || v.growth_rate || 0.05;
-        const dispFcf = v.fcf0 || v.owner_earnings_ps || 0;
-        
-        waccDisplay = (dispWacc * 100).toFixed(2) + '%';
-        gDisplay = (dispG * 100).toFixed(1) + '%';
-        
+        waccDisplay = (v.wacc * 100).toFixed(2) + '%';
+        gDisplay = (v.g * 100).toFixed(1) + '%';
         scoreTooltip = [
           (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
           (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
-          '✓ Base: ' + fmtDollar(dispFcf)
+          '✓ FCF0: ' + fmtDollar(v.fcf0)
         ].join('\n');
       }
 
@@ -830,7 +825,7 @@
         <td class="td-num" style="color:${scoreColor}; font-weight:700; cursor:help" title="${scoreTooltip}">${scoreDisplay}</td>
         <td class="td-num">${waccDisplay}</td>
         <td class="td-num">${gDisplay}</td>
-        <td class="td-value">${fmtDollar(v.fcf0 || v.owner_earnings_ps || 0)}</td>
+        <td class="td-value">${fmtDollar(v.owner_earnings_ps)}</td>
       </tr>`;
     }).join('');
 
@@ -898,56 +893,22 @@
         return eqVal / shares;
     };
 
-    const baseWacc = v.wacc || v.discount_rate || 0.10;
-    const baseG = v.g || v.growth_rate || 0.05;
+    const baseWacc = v.wacc;
+    const baseG = v.g;
     const tg = v.terminal_growth_rate || 0.02;
-    
-    // We are currently running the standard DCF logic which provides owner_earnings_ps
-    const fcf0 = v.fcf0 || v.owner_earnings_ps || 0;
-    const currentPrice = v.current_price || 0;
-
-    // Use old DCF 10-year logic for fallback
-    const calcLegacyIntrinsic = (oe, r, g, term_g) => {
-        let pvSum = 0;
-        let currentOe = oe;
-        for (let i = 1; i <= 10; i++) {
-            currentOe *= (1 + g);
-            pvSum += currentOe / Math.pow(1 + r, i);
-        }
-        const terminalVal = (currentOe * (1 + term_g)) / (r - term_g);
-        const pvTerminal = terminalVal / Math.pow(1 + r, 10);
-        return pvSum + pvTerminal;
-    };
-    
-    // Determine which mode we're in
-    const isLegacy = typeof v.wacc === 'undefined';
+    const fcf0 = v.fcf0;
+    const currentPrice = v.current_price;
+    const cash = v.cash || 0;
+    const debt = v.d || 0;
+    const shares = v.shares || 1;
 
     const gRange = [];
-    if (isLegacy) {
-      // Legacy steps: 1% increments for 9 items
-      for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.01));
-    } else {
-      // New steps: 0.5% increments
-      for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.005));
-    }
+    for (let i = -4; i <= 4; i++) gRange.push(baseG + (i * 0.005));
 
     const waccRange = [];
-    if (isLegacy) {
-      // Legacy steps: 0.5% increments for 9 items
-      for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.005));
-    } else {
-      // New steps: 0.25% increments
-      for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
-    }
+    for (let i = -4; i <= 4; i++) waccRange.push(baseWacc + (i * 0.0025));
 
-    let assumptionText = '';
-    if (isLegacy) {
-      assumptionText = `Base WACC (R): <strong>${(baseWacc*100).toFixed(2)}%</strong> · Base Growth (G): <strong>${(baseG*100).toFixed(2)}%</strong> · Terminal Growth: <strong>${(tg*100).toFixed(2)}%</strong>`;
-    } else {
-      assumptionText = `Base WACC (R): <strong>${(baseWacc*100).toFixed(2)}%</strong> · Base Growth (G): <strong>${(baseG*100).toFixed(2)}%</strong> · Terminal Growth: <strong>${(tg*100).toFixed(2)}%</strong>`;
-    }
-
-    let tableHtml = `<div style="font-size:12px; margin-bottom: 1rem; color:var(--text-secondary)">${assumptionText}</div><table class="sens-table">`;
+    let tableHtml = `<table class="sens-table">`;
     tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (R) ↓ \\ Growth (G) →</th>`;
     gRange.forEach(g => {
         tableHtml += `<th class="sens-header-r">${(g * 100).toFixed(1)}%</th>`;
@@ -958,13 +919,7 @@
         if (wacc <= 0) return;
         tableHtml += `<tr><th class="sens-header-g">${(wacc * 100).toFixed(2)}%</th>`;
         gRange.forEach(g => {
-            let val = 0;
-            if (isLegacy) {
-                val = calcLegacyIntrinsic(fcf0, wacc, g, tg);
-            } else {
-                val = calcIntrinsic(fcf0, wacc, g, tg, v.cash || 0, v.d || 0, v.shares || 1);
-            }
-            
+            const val = calcIntrinsic(fcf0, wacc, g, tg, cash, debt, shares);
             const isBase = Math.abs(wacc - baseWacc) < 0.0001 && Math.abs(g - baseG) < 0.0001;
             const ratio = currentPrice / val;
             let bgColor = 'transparent';
@@ -977,12 +932,6 @@
     });
     tableHtml += `</tbody></table>`;
     content.innerHTML = tableHtml;
-  }
-
-  function closeSensitivity(e) {
-    if (!e || e.target === document.getElementById('sens-modal') || e.target.classList.contains('modal-close')) {
-        document.getElementById('sens-modal').classList.remove('active');
-    }
   }
 
   // ── Dividends lazy load (needs market + tax) ─────────────────
