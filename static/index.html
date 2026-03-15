@@ -653,7 +653,7 @@
       <button class="modal-close" onclick="closeSensitivity()">&times;</button>
     </div>
     <div id="sens-description" class="hero-sub" style="margin-bottom: 1rem;">
-      Exploring the relationship between WACC ($r$) and Growth ($g$) for intrinsic valuation.
+      Exploring the relationship between WACC (R) and Growth (G) for intrinsic valuation.
     </div>
     <div id="sens-content"></div>
     <div class="sens-legend">
@@ -903,7 +903,7 @@
     let tableHtml = `<table class="sens-table">`;
     
     // Header Row (Growth Rates)
-    tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (r) ↓ \\ Growth (g) →</th>`;
+    tableHtml += `<thead><tr><th rowspan="2" class="sens-header-g">WACC (R) ↓ \\ Growth (G) →</th>`;
     gRange.forEach(g => {
         tableHtml += `<th class="sens-header-r">${(g * 100).toFixed(1)}%</th>`;
     });
