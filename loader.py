@@ -319,6 +319,8 @@ from metrics.tax import calculate_tax_buckets
 # 10. Buffett Valuation
 # ---------------------------------------------------------------------------
 
+from core.database import _yf_db_get, _yf_db_set
+
 _valuation_cache: dict = {}
 
 
