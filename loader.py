@@ -17,239 +17,28 @@ load_dotenv()
 # 1. Startup .gitignore check
 # ---------------------------------------------------------------------------
 
-def check_gitignore():
-    """Verify .gitignore exists and contains required security patterns."""
-    required = {"*.csv", "*.json", "*.env", "*.db"}
-    gitignore_path = os.path.join(os.path.dirname(__file__), ".gitignore")
-
-    if not os.path.exists(gitignore_path):
-        raise RuntimeError(".gitignore not found — refusing to start. "
-                           "Create .gitignore with: *.csv, *.json, *.env, *.db")
-
-    with open(gitignore_path) as f:
-        lines = {line.strip() for line in f if line.strip() and not line.startswith("#")}
-
-    missing = required - lines
-    if missing:
-        raise RuntimeError(
-            f".gitignore is missing required patterns: {sorted(missing)}. "
-            "Add them before running."
-        )
+from core.config import check_gitignore
 
 
 # ---------------------------------------------------------------------------
 # 2. Data loading
 # ---------------------------------------------------------------------------
 
-EXPECTED_COLUMNS = [
-    "account_id", "account_name", "account_mask", "institution_name",
-    "holding_name", "ticker", "type_display", "quantity", "value",
-    "security_id", "security_name", "price_updated",
-]
-
-
-def load_from_csv(path: str):
-    """Load holdings from a local CSV file."""
-    import pandas as pd
-    df = pd.read_csv(path)
-    return df
-
-
-def load_from_sheets(sheet_id: str):
-    """
-    Load holdings from Google Sheets via OAuth2 Authorization Code Flow.
-
-    Credentials JSON path is read from GOOGLE_CREDENTIALS_PATH env var
-    (default: credentials.json). Token is stored/refreshed in token.json.
-    """
-    import pandas as pd
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from google.auth.transport.requests import Request
-    from googleapiclient.discovery import build
-
-    SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-    token_path = "token.json"
-
-    creds = None
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            if not os.path.exists(creds_path):
-                raise FileNotFoundError(
-                    f"OAuth credentials file not found: {creds_path}. "
-                    "Download it from Google Cloud Console and set GOOGLE_CREDENTIALS_PATH."
-                )
-            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(token_path, "w") as token_file:
-            token_file.write(creds.to_json())
-
-    service = build("sheets", "v4", credentials=creds)
-    result = (
-        service.spreadsheets()
-        .values()
-        .get(spreadsheetId=sheet_id, range="A1:Z")
-        .execute()
-    )
-    rows = result.get("values", [])
-    if not rows:
-        raise ValueError("Sheet returned no data.")
-
-    headers = rows[0]
-    data = rows[1:]
-    df = pd.DataFrame(data, columns=headers)
-    return df
-
-
-def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
-    """
-    Dispatcher: load from Monarch JSON, CSV, or Google Sheets (checked in that order).
-    """
-    monarch_json = monarch_json or os.environ.get("MONARCH_JSON_PATH")
-    csv_path = csv_path or os.environ.get("CSV_PATH")
-    sheet_id = sheet_id or os.environ.get("SHEET_ID")
-
-    if monarch_json:
-        print(f"Loading from Monarch JSON: {monarch_json}", flush=True)
-        from monarch import load_from_json
-        return load_from_json(monarch_json)
-    if csv_path:
-        print(f"Loading from CSV: {csv_path}", flush=True)
-        return load_from_csv(csv_path)
-    if sheet_id:
-        print(f"Loading from Google Sheets: {sheet_id}", flush=True)
-        return load_from_sheets(sheet_id)
-
-    raise ValueError(
-        "No data source configured. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID."
-    )
+from data.sources import load, load_from_csv, load_from_sheets, EXPECTED_COLUMNS
 
 
 # ---------------------------------------------------------------------------
 # 3. Normalization & Deduplication
 # ---------------------------------------------------------------------------
 
-# Map different stock classes or common aliases to a single "Master Ticker"
-# for concentration risk aggregation.
-TICKER_ALIASES = {
-    "GOOG":  "GOOGL", # Alphabet Inc.
-    "BRK-A": "BRK-B", # Berkshire Hathaway
-    "BRKA":  "BRK-B",
-    "BRKB":  "BRK-B",
-}
-
-# Manual overrides for securities with missing or broken ticker symbols
-TICKER_OVERRIDES = {
-    "UNKNOWN_189993187450742649": "VBTIX", # Vanguard Total Bond Market Index Fund
-    "UNKNOWN_189993188208175994": "VFFSX", # Vanguard 500 Index Fund
-    "Inst Tot Bd Mkt Ix Tr":      "VBTIX",
-    "Instl 500 Index Trust":      "VFFSX",
-}
-
-
-def normalize_ticker(ticker: str, aggregate_classes: bool = False) -> str:
-    """
-    Normalize ticker symbols to a standard format.
-    Converts . to - (e.g., BRK.B -> BRK-B).
-    
-    If aggregate_classes is True, it will also map different share classes 
-    to a single master ticker (e.g., GOOG -> GOOGL).
-    """
-    if not ticker or not isinstance(ticker, str):
-        return ""
-    
-    # Check manual overrides first
-    if ticker in TICKER_OVERRIDES:
-        ticker = TICKER_OVERRIDES[ticker]
-
-    t = ticker.strip().upper()
-    # Standardize on Yahoo Finance format (hyphen instead of dot/slash)
-    t = t.replace(".", "-").replace("/", "-")
-    # Remove any extra spaces around the hyphen
-    if "-" in t:
-        parts = [p.strip() for p in t.split("-")]
-        t = "-".join(parts)
-    
-    # Strip common class suffixes if they don't have a hyphen yet
-    # e.g. "BRKB" -> "BRK-B" logic handled above partially, but let's be explicit
-    if t == "BRKB": t = "BRK-B"
-    if t == "BRKA": t = "BRK-B" if aggregate_classes else "BRK-A"
-
-    if aggregate_classes:
-        return TICKER_ALIASES.get(t, t)
-    
-    return t
-
-
-def deduplicate(df):
-    """
-    Deduplicate holdings by ticker (position view).
-
-    Sums quantity and value across accounts. Preserves security_id, security_name,
-    type_display from the first occurrence per ticker.
-    """
-    import pandas as pd
-
-    df = df.copy()
-    df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
-    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
-    
-    # 1. Apply TICKER_OVERRIDES first (using security_id or raw name)
-    # This ensures that items with empty tickers are merged correctly.
-    def get_initial_ticker(row):
-        t = row.get("ticker") or ""
-        if not t or t.startswith("UNKNOWN"):
-            # Check if security_id or name is in overrides
-            sid = str(row.get("security_id", ""))
-            name = str(row.get("security_name", ""))
-            return TICKER_OVERRIDES.get(sid, TICKER_OVERRIDES.get(name, t))
-        return t
-
-    df["ticker"] = df.apply(get_initial_ticker, axis=1)
-
-    # 2. Normalize tickers for consistent display and merging.
-    if "ticker" in df.columns:
-        df["ticker"] = df["ticker"].apply(lambda t: normalize_ticker(t, aggregate_classes=False))
-
-    # Identify by ticker. If ticker is empty, use security_id as fallback
-    df["group_id"] = df["ticker"].where(df["ticker"] != "", df["security_id"])
-
-    # Metadata to preserve from first occurrence
-    meta = df.groupby("group_id")[["ticker", "security_id", "security_name", "type_display"]].first()
-
-    # Summed numeric columns
-    numeric_cols = ["quantity", "value"]
-    if "cost_basis" in df.columns:
-        df["cost_basis"] = pd.to_numeric(df["cost_basis"], errors="coerce").fillna(0)
-        numeric_cols.append("cost_basis")
-    numeric = df.groupby("group_id")[numeric_cols].sum()
-
-    result = meta.join(numeric).reset_index(drop=True)
-    return result
+from data.normalization import TICKER_ALIASES, TICKER_OVERRIDES, normalize_ticker, deduplicate
 
 
 # ---------------------------------------------------------------------------
 # 4. Asset class normalization
 # ---------------------------------------------------------------------------
 
-CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
-FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
-MUTUAL_FUND_TICKERS = {"VFFSX"}
-
-
-def normalize_asset_class(df):
-    """Normalize type_display based on ticker overrides."""
-    df = df.copy()
-    df.loc[df["ticker"].isin(CASH_TICKERS), "type_display"] = "Cash"
-    df.loc[df["ticker"].isin(FIXED_INCOME_TICKERS), "type_display"] = "Fixed Income"
-    df.loc[df["ticker"].isin(MUTUAL_FUND_TICKERS), "type_display"] = "Mutual Fund"
-    return df
+from data.normalization import CASH_TICKERS, FIXED_INCOME_TICKERS, MUTUAL_FUND_TICKERS, normalize_asset_class
 
 
 # ---------------------------------------------------------------------------
@@ -600,63 +389,7 @@ def calculate_institutions(df_raw) -> list:
 YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
 _market_cache: dict = {}  # keyed by ticker string
 
-YF_CACHE_DB = "market_data.db"
-_YF_TTL = {"market": 24, "valuation": 6}  # hours per data type
-
-
-def _yf_db_get(ticker: str, data_type: str) -> dict | None:
-    """Return cached yfinance data if present and within TTL, else None."""
-    import sqlite3, json
-    from datetime import datetime, timedelta
-    try:
-        conn = sqlite3.connect(YF_CACHE_DB)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS yf_cache (
-                ticker TEXT NOT NULL,
-                data_type TEXT NOT NULL,
-                data TEXT NOT NULL,
-                fetched_at TEXT NOT NULL,
-                PRIMARY KEY (ticker, data_type)
-            )
-        """)
-        row = conn.execute(
-            "SELECT data, fetched_at FROM yf_cache WHERE ticker=? AND data_type=?",
-            (ticker, data_type)
-        ).fetchone()
-        conn.close()
-        if not row:
-            return None
-        cutoff = datetime.utcnow() - timedelta(hours=_YF_TTL[data_type])
-        if datetime.fromisoformat(row[1]) < cutoff:
-            return None
-        return json.loads(row[0])
-    except Exception:
-        return None
-
-
-def _yf_db_set(ticker: str, data_type: str, data: dict) -> None:
-    """Persist yfinance data to SQLite cache."""
-    import sqlite3, json
-    from datetime import datetime
-    try:
-        conn = sqlite3.connect(YF_CACHE_DB)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS yf_cache (
-                ticker TEXT NOT NULL,
-                data_type TEXT NOT NULL,
-                data TEXT NOT NULL,
-                fetched_at TEXT NOT NULL,
-                PRIMARY KEY (ticker, data_type)
-            )
-        """)
-        conn.execute(
-            "INSERT OR REPLACE INTO yf_cache (ticker, data_type, data, fetched_at) VALUES (?, ?, ?, ?)",
-            (ticker, data_type, json.dumps(data), datetime.utcnow().isoformat())
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f"yf_cache write error for {ticker}/{data_type}: {e}", file=sys.stderr)
+from core.database import YF_CACHE_DB, _YF_TTL, _yf_db_get, _yf_db_set
 
 
 def calculate_sector_allocation(positions: list) -> dict:
