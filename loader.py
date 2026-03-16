@@ -965,7 +965,7 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
         g_annual = info.get("earningsGrowth")
         valid = [x for x in [g_quarterly, g_annual] if x is not None and not pd.isna(x)]
         g = sum(valid) / len(valid) if valid else 0.05
-        if g > 0.30: g = 0.30
+        if g > 0.20: g = 0.20
         if g < 0: g = 0.0
 
         result = {
