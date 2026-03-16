@@ -11,21 +11,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from loader import (
-    check_gitignore,
-    load,
-    deduplicate,
-    normalize_asset_class,
-    calculate_metrics,
-    calculate_risk_metrics,
-    calculate_efficiency_metrics,
-    calculate_sector_allocation,
-    save_risk_snapshot,
-    calculate_institutions,
-    enrich_with_market_data,
-    calculate_tax_buckets,
-    calculate_valuation_metrics,
-)
+from core.config import check_gitignore
+from data.sources import load
+from data.normalization import deduplicate, normalize_asset_class
+from data.market_data import enrich_with_market_data
+from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
+from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot
+from metrics.tax import calculate_tax_buckets
+from metrics.valuation import calculate_valuation_metrics
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO)
