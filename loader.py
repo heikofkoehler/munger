@@ -600,6 +600,64 @@ def calculate_institutions(df_raw) -> list:
 YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
 _market_cache: dict = {}  # keyed by ticker string
 
+YF_CACHE_DB = "market_data.db"
+_YF_TTL = {"market": 24, "valuation": 6}  # hours per data type
+
+
+def _yf_db_get(ticker: str, data_type: str) -> dict | None:
+    """Return cached yfinance data if present and within TTL, else None."""
+    import sqlite3, json
+    from datetime import datetime, timedelta
+    try:
+        conn = sqlite3.connect(YF_CACHE_DB)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS yf_cache (
+                ticker TEXT NOT NULL,
+                data_type TEXT NOT NULL,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                PRIMARY KEY (ticker, data_type)
+            )
+        """)
+        row = conn.execute(
+            "SELECT data, fetched_at FROM yf_cache WHERE ticker=? AND data_type=?",
+            (ticker, data_type)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        cutoff = datetime.utcnow() - timedelta(hours=_YF_TTL[data_type])
+        if datetime.fromisoformat(row[1]) < cutoff:
+            return None
+        return json.loads(row[0])
+    except Exception:
+        return None
+
+
+def _yf_db_set(ticker: str, data_type: str, data: dict) -> None:
+    """Persist yfinance data to SQLite cache."""
+    import sqlite3, json
+    from datetime import datetime
+    try:
+        conn = sqlite3.connect(YF_CACHE_DB)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS yf_cache (
+                ticker TEXT NOT NULL,
+                data_type TEXT NOT NULL,
+                data TEXT NOT NULL,
+                fetched_at TEXT NOT NULL,
+                PRIMARY KEY (ticker, data_type)
+            )
+        """)
+        conn.execute(
+            "INSERT OR REPLACE INTO yf_cache (ticker, data_type, data, fetched_at) VALUES (?, ?, ?, ?)",
+            (ticker, data_type, json.dumps(data), datetime.utcnow().isoformat())
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"yf_cache write error for {ticker}/{data_type}: {e}", file=sys.stderr)
+
 
 def calculate_sector_allocation(positions: list) -> dict:
     """
@@ -678,11 +736,15 @@ def enrich_with_market_data(positions: list) -> list:
     for t in unique_tickers:
         if t in _market_cache:
             continue
+        cached = _yf_db_get(t, "market")
+        if cached:
+            _market_cache[t] = cached
+            continue
         try:
             ticker_obj = yf.Ticker(t)
             info = ticker_obj.info
             _market_cache[t] = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
-            
+
             # 2. Look-through for ETFs
             # If it's an ETF and missing Trailing PE, or if we want better accuracy via look-through
             if info.get("quoteType") == "ETF":
@@ -690,16 +752,21 @@ def enrich_with_market_data(positions: list) -> list:
                 if details.get("holdings"):
                     total_earn_yield = 0.0
                     weight_covered = 0.0
-                    
+
                     # Collect and fetch underlying tickers if not in cache
                     underlying_tickers = [h["ticker"] for h in details["holdings"] if h["ticker"] not in _market_cache]
                     for ut in underlying_tickers:
+                        ut_cached = _yf_db_get(ut, "market")
+                        if ut_cached:
+                            _market_cache[ut] = ut_cached
+                            continue
                         try:
                             u_info = yf.Ticker(ut).info
                             _market_cache[ut] = {k: u_info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+                            _yf_db_set(ut, "market", _market_cache[ut])
                         except Exception:
                             _market_cache[ut] = {k: None for k in _FIELDS}
-                    
+
                     for h in details["holdings"]:
                         h_ticker = h["ticker"]
                         h_data = _market_cache.get(h_ticker, {})
@@ -707,13 +774,14 @@ def enrich_with_market_data(positions: list) -> list:
                         if pe and pe > 0:
                             total_earn_yield += (1.0 / pe) * h["weight"]
                             weight_covered += h["weight"]
-                    
+
                     if weight_covered > 0.10: # Only override if we have decent coverage
                         avg_yield = total_earn_yield / weight_covered
                         if avg_yield > 0:
                             _market_cache[t]["trailing_pe"] = 1.0 / avg_yield
                             print(f"Look-through: ETF {t} calculated PE {1.0/avg_yield:.2f} via {weight_covered:.1%} coverage", flush=True)
 
+            _yf_db_set(t, "market", _market_cache[t])
         except Exception:
             _market_cache[t] = {k: None for k in _FIELDS}
 
@@ -836,6 +904,11 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
     """
     import yfinance as yf
     import pandas as pd
+
+    cached = _yf_db_get(ticker_symbol, "valuation")
+    if cached:
+        return cached
+
     try:
         t = yf.Ticker(ticker_symbol.replace("-", "."))
         info = t.info
@@ -885,7 +958,7 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
         if pd.isna(g) or g > 0.30: g = 0.05 # Cap high growth at 5% for stability instead of 30% to be safer
         if g < 0: g = 0.0 # Clamp negative growth; model uses terminal value for long-run, not contraction
 
-        return {
+        result = {
             "ticker": ticker_symbol,
             "name": info.get("longName") or info.get("shortName"),
             "fcf0": fcf0,
@@ -901,6 +974,8 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
             "gross_margins": info.get("grossMargins") or 0,
             "profit_margins": info.get("profitMargins") or 0,
         }
+        _yf_db_set(ticker_symbol, "valuation", result)
+        return result
     except Exception as e:
         import traceback
         traceback.print_exc()
