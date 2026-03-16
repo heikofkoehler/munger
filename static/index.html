@@ -812,7 +812,8 @@
         scoreTooltip = [
           (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
           (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',
-          '✓ FCF0: ' + fmtDollar(v.fcf0)
+          (v.gross_margin > 0.40 ? '✓' : '✗') + ' Gross Margin > 40% (' + (v.gross_margin*100).toFixed(1) + '%)',
+          (v.net_margin > 0.10 ? '✓' : '✗') + ' Net Margin > 10% (' + (v.net_margin*100).toFixed(1) + '%)',
         ].join('\n');
       }
 
@@ -932,6 +933,11 @@
     });
     tableHtml += `</tbody></table>`;
     content.innerHTML = tableHtml;
+  }
+
+  function closeSensitivity(event) {
+    if (event && event.target !== document.getElementById('sens-modal')) return;
+    document.getElementById('sens-modal').classList.remove('active');
   }
 
   // ── Dividends lazy load (needs market + tax) ─────────────────
