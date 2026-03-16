@@ -45,44 +45,7 @@ from data.normalization import CASH_TICKERS, FIXED_INCOME_TICKERS, MUTUAL_FUND_T
 # 5. Metrics calculation
 # ---------------------------------------------------------------------------
 
-def calculate_metrics(df) -> dict:
-    """
-    Calculate portfolio metrics.
-
-    Returns:
-        {
-            "total_value": float,
-            "positions": [{"ticker", "security_name", "value", "weight_pct", "type_display"}, ...],
-            "allocation": {"Stock": pct, "ETF": pct, ...},
-        }
-    """
-    total = df["value"].sum()
-
-    positions = []
-    for _, row in df.iterrows():
-        ticker = normalize_ticker(row["ticker"] or f"UNKNOWN_{row['security_id']}", aggregate_classes=False)
-        weight = (row["value"] / total * 100) if total else 0.0
-        positions.append({
-            "ticker": ticker,
-            "security_name": row["security_name"],
-            "value": round(float(row["value"]), 2),
-            "weight_pct": round(float(weight), 4),
-            "type_display": row["type_display"],
-            "quantity": round(float(row["quantity"]), 6),
-        })
-
-    # Sort by value descending
-    positions.sort(key=lambda p: p["value"], reverse=True)
-
-    # Allocation by type_display
-    alloc_raw = df.groupby("type_display")["value"].sum()
-    allocation = {k: round(v / total * 100, 4) for k, v in alloc_raw.items()} if total else {}
-
-    return {
-        "total_value": round(float(total), 2),
-        "positions": positions,
-        "allocation": allocation,
-    }
+from metrics.portfolio import calculate_metrics
 
 
 # ---------------------------------------------------------------------------
@@ -90,43 +53,7 @@ def calculate_metrics(df) -> dict:
 # ---------------------------------------------------------------------------
 
 CONC_THRESHOLD = float(os.environ.get("CONC_THRESHOLD", 10.0))
-_fund_cache: dict = {}  # keyed by ticker
-
-
-def get_fund_details(ticker: str) -> dict:
-    """
-    Fetch expense ratio and top holdings for a fund ticker.
-    Returns: {"expense_ratio": float or None, "holdings": [{"ticker": str, "weight": float}, ...]}
-    """
-    import yfinance as yf
-    import pandas as pd
-
-    if ticker in _fund_cache:
-        return _fund_cache[ticker]
-
-    try:
-        t = yf.Ticker(ticker)
-        info = t.info
-        raw_ratio = info.get("netExpenseRatio") or info.get("expenseRatio")
-        # yfinance returns these as percentages (e.g. 0.03 for 0.03%), 
-        # so divide by 100 for decimal representation (0.0003)
-        expense_ratio = float(raw_ratio) / 100 if raw_ratio is not None else None
-
-        holdings = []
-        if hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
-            df_holdings = t.funds_data.top_holdings
-            if not df_holdings.empty:
-                # The index is the ticker symbol
-                for symbol, row in df_holdings.iterrows():
-                    weight = row.get("Holding Percent") or row.get("Weight") or 0.0
-                    holdings.append({"ticker": str(symbol), "weight": float(weight)})
-
-        res = {"expense_ratio": expense_ratio, "holdings": holdings}
-        _fund_cache[ticker] = res
-        return res
-    except Exception as e:
-        print(f"Error fetching fund details for {ticker}: {e}", file=sys.stderr)
-        return {"expense_ratio": None, "holdings": []}
+from data.market_data import get_fund_details
 
 
 def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
@@ -370,258 +297,22 @@ def check_concentration(df) -> list:
 # 7. Institutions summary
 # ---------------------------------------------------------------------------
 
-def calculate_institutions(df_raw) -> list:
-    """Summarize total value per institution from the raw (pre-dedup) DataFrame."""
-    import pandas as pd
-    df = df_raw.copy()
-    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
-    grouped = df.groupby("institution_name")["value"].sum().reset_index()
-    total = grouped["value"].sum()
-    grouped["weight_pct"] = (grouped["value"] / total * 100).round(4)
-    grouped = grouped.sort_values("value", ascending=False)
-    return grouped.to_dict(orient="records")
+from metrics.portfolio import calculate_institutions
 
 
 # ---------------------------------------------------------------------------
 # 8. Market data enrichment (yfinance)
 # ---------------------------------------------------------------------------
 
-YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
-_market_cache: dict = {}  # keyed by ticker string
-
-from core.database import YF_CACHE_DB, _YF_TTL, _yf_db_get, _yf_db_set
-
-
-def calculate_sector_allocation(positions: list) -> dict:
-    """
-    Calculate portfolio allocation by economic sector.
-    Returns: {"Technology": 40.5, "Financial Services": 20.1, ...}
-    """
-    # Use global market cache to resolve sectors for tickers
-    sector_values = {}
-    total_market_value = 0
-
-    for p in positions:
-        ticker = p.get("ticker")
-        val = p.get("value") or 0
-        
-        # Default to "Other/Unknown" if no sector found
-        sector = "Other/Unknown"
-        if p.get("type_display") == "Fixed Income":
-            sector = "Fixed Income"
-        elif p.get("type_display") == "Cash":
-            sector = "Cash"
-        elif ticker and ticker in _market_cache:
-            sector = _market_cache[ticker].get("sector") or "Other/Unknown"
-
-        sector_values[sector] = sector_values.get(sector, 0.0) + val
-        total_market_value += val
-
-    if total_market_value == 0:
-        return {}
-
-    # Convert to percentages
-    return {
-        s: round((v / total_market_value) * 100, 2)
-        for s, v in sector_values.items()
-    }
-
-
-def enrich_with_market_data(positions: list) -> list:
-    """
-    Enrich each position dict with market data from yfinance.
-
-    Adds: dividend_yield, dividend_rate, ex_dividend_date, payout_ratio,
-          trailing_eps, forward_eps, trailing_pe, forward_pe,
-          market_cap, sector, industry, earnings_timestamp.
-    Fields are None if ticker is skipped or lookup fails.
-    Only ticker symbols leave the machine.
-    """
-    import yfinance as yf
-
-    _FIELDS = [
-        "dividend_yield", "dividend_rate", "ex_dividend_date", "payout_ratio",
-        "trailing_eps", "forward_eps", "trailing_pe", "forward_pe",
-        "market_cap", "sector", "industry", "earnings_timestamp",
-    ]
-    _YF_MAP = {
-        "dividend_yield":    "dividendYield",
-        "dividend_rate":     "dividendRate",
-        "ex_dividend_date":  "exDividendDate",
-        "payout_ratio":      "payoutRatio",
-        "trailing_eps":      "trailingEps",
-        "forward_eps":       "forwardEps",
-        "trailing_pe":       "trailingPE",
-        "forward_pe":        "forwardPE",
-        "market_cap":        "marketCap",
-        "sector":            "sector",
-        "industry":          "industry",
-        "earnings_timestamp": "earningsTimestamp",
-    }
-
-    # Collect unique tickers to fetch
-    unique_tickers = {
-        p["ticker"] for p in positions
-        if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS
-    }
-
-    # 1. Fetch data for primary tickers
-    for t in unique_tickers:
-        if t in _market_cache:
-            continue
-        cached = _yf_db_get(t, "market")
-        if cached:
-            _market_cache[t] = cached
-            continue
-        try:
-            ticker_obj = yf.Ticker(t)
-            info = ticker_obj.info
-            _market_cache[t] = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
-
-            # 2. Look-through for ETFs
-            # If it's an ETF and missing Trailing PE, or if we want better accuracy via look-through
-            if info.get("quoteType") == "ETF":
-                details = get_fund_details(t)
-                if details.get("holdings"):
-                    total_earn_yield = 0.0
-                    weight_covered = 0.0
-
-                    # Collect and fetch underlying tickers if not in cache
-                    underlying_tickers = [h["ticker"] for h in details["holdings"] if h["ticker"] not in _market_cache]
-                    for ut in underlying_tickers:
-                        ut_cached = _yf_db_get(ut, "market")
-                        if ut_cached:
-                            _market_cache[ut] = ut_cached
-                            continue
-                        try:
-                            u_info = yf.Ticker(ut).info
-                            _market_cache[ut] = {k: u_info.get(yf_key) for k, yf_key in _YF_MAP.items()}
-                            _yf_db_set(ut, "market", _market_cache[ut])
-                        except Exception:
-                            _market_cache[ut] = {k: None for k in _FIELDS}
-
-                    for h in details["holdings"]:
-                        h_ticker = h["ticker"]
-                        h_data = _market_cache.get(h_ticker, {})
-                        pe = h_data.get("trailing_pe")
-                        if pe and pe > 0:
-                            total_earn_yield += (1.0 / pe) * h["weight"]
-                            weight_covered += h["weight"]
-
-                    if weight_covered > 0.10: # Only override if we have decent coverage
-                        avg_yield = total_earn_yield / weight_covered
-                        if avg_yield > 0:
-                            _market_cache[t]["trailing_pe"] = 1.0 / avg_yield
-                            print(f"Look-through: ETF {t} calculated PE {1.0/avg_yield:.2f} via {weight_covered:.1%} coverage", flush=True)
-
-            _yf_db_set(t, "market", _market_cache[t])
-        except Exception:
-            _market_cache[t] = {k: None for k in _FIELDS}
-
-    enriched = []
-    for pos in positions:
-        p = dict(pos)
-        ticker = p.get("ticker", "")
-        if ticker and ticker not in YFINANCE_SKIP_TICKERS:
-            market = _market_cache.get(ticker, {k: None for k in _FIELDS})
-        else:
-            market = {k: None for k in _FIELDS}
-        p.update(market)
-        enriched.append(p)
-
-    return enriched
+from data.market_data import YFINANCE_SKIP_TICKERS, _market_cache, enrich_with_market_data
+from metrics.portfolio import calculate_sector_allocation
 
 
 # ---------------------------------------------------------------------------
 # 9. Tax bucket calculation
 # ---------------------------------------------------------------------------
 
-_TAX_RULES = [
-    ("Roth", "Tax-Exempt (Roth)"),  # must precede IRA so "Roth IRA" → exempt
-    ("IRA",  "Tax-Deferred"),
-    ("401",  "Tax-Deferred"),
-]
-
-
-def _classify_account(account_name: str) -> str:
-    for pattern, bucket in _TAX_RULES:
-        if pattern in account_name:
-            return bucket
-    return "Taxable"
-
-
-def calculate_tax_buckets(df_raw) -> dict:
-    """
-    Group accounts into tax buckets based on account_name patterns.
-
-    Returns a dict with total_value and per-bucket breakdown including
-    accounts and their holdings sorted by value desc.
-    """
-    import pandas as pd
-
-    df = df_raw.copy()
-    df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
-
-    total_value = float(df["value"].sum())
-    buckets: dict = {}
-
-    for account_name, acct_df in df.groupby("account_name"):
-        bucket_label = _classify_account(str(account_name))
-        acct_value = float(acct_df["value"].sum())
-        institution = str(acct_df["institution_name"].iloc[0]) if len(acct_df) else ""
-
-        has_cost_basis = "cost_basis" in acct_df.columns
-        holdings = []
-        for _, row in acct_df.iterrows():
-            if float(row["value"]) < 0.01:
-                continue
-            
-            ticker = normalize_ticker(str(row["ticker"]) or f"UNKNOWN_{row['security_id']}")
-            
-            # Apply asset class overrides consistently
-            type_display = str(row["type_display"])
-            if ticker in CASH_TICKERS: type_display = "Cash"
-            elif ticker in FIXED_INCOME_TICKERS: type_display = "Fixed Income"
-            elif ticker in MUTUAL_FUND_TICKERS: type_display = "Mutual Fund"
-
-            holdings.append({
-                "ticker": ticker,
-                "security_name": str(row["security_name"]),
-                "quantity": round(float(pd.to_numeric(row["quantity"], errors="coerce") or 0), 6),
-                "value": round(float(row["value"]), 2),
-                "cost_basis": round(float(cb), 2) if has_cost_basis and not pd.isna(cb := pd.to_numeric(row["cost_basis"], errors="coerce")) else None,
-                "type_display": type_display,
-            })
-        
-        holdings.sort(key=lambda h: h["value"], reverse=True)
-
-        account_entry = {
-            "account_name": str(account_name),
-            "institution_name": institution,
-            "value": round(acct_value, 2),
-            "holdings": holdings,
-        }
-
-        if bucket_label not in buckets:
-            buckets[bucket_label] = {"value": 0.0, "accounts": []}
-        buckets[bucket_label]["value"] += acct_value
-        buckets[bucket_label]["accounts"].append(account_entry)
-
-    # Sort accounts within each bucket by value desc
-    for label, bucket in buckets.items():
-        bucket["value"] = round(bucket["value"], 2)
-        bucket["weight_pct"] = round(bucket["value"] / total_value * 100, 4) if total_value else 0.0
-        bucket["accounts"].sort(key=lambda a: a["value"], reverse=True)
-
-    # Sort buckets by value desc
-    sorted_buckets = dict(
-        sorted(buckets.items(), key=lambda x: x[1]["value"], reverse=True)
-    )
-
-    return {
-        "total_value": round(total_value, 2),
-        "buckets": sorted_buckets,
-    }
+from metrics.tax import calculate_tax_buckets
 
 
 # ---------------------------------------------------------------------------
