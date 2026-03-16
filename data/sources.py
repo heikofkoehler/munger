@@ -70,11 +70,11 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
     csv_path = csv_path or os.environ.get("CSV_PATH")
     sheet_id = sheet_id or os.environ.get("SHEET_ID")
 
-    if monarch_json:
+    if monarch_json and os.path.exists(monarch_json):
         print(f"Loading from Monarch JSON: {monarch_json}", flush=True)
         from monarch import load_from_json
         return load_from_json(monarch_json)
-    if csv_path:
+    if csv_path and os.path.exists(csv_path):
         print(f"Loading from CSV: {csv_path}", flush=True)
         return load_from_csv(csv_path)
     if sheet_id:
@@ -82,5 +82,5 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
         return load_from_sheets(sheet_id)
 
     raise ValueError(
-        "No data source configured. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID."
+        "No data source configured or found. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID and ensure the local files exist."
     )
