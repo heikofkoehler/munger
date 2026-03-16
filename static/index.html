@@ -26,6 +26,16 @@
       --color-mf:       #f5a623;
     }
 
+    :root[data-theme="light"] {
+      --bg-page:     #f4f5f7;
+      --bg-card:     #ffffff;
+      --bg-card-2:   #f0f2f5;
+      --border:      #d1d5db;
+      --text-primary:   #111827;
+      --text-secondary: #4b5563;
+      --text-muted:     #9ca3af;
+    }
+
     /* ── Reset ──────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -546,7 +556,10 @@
 
 <header>
   <div class="brand"><span>M</span>UNGER</div>
-  <button id="refresh-btn" onclick="refreshData()">Refresh Data</button>
+  <div style="display: flex; gap: 1rem; align-items: center;">
+    <button id="theme-btn" onclick="toggleTheme()" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:18px;" title="Toggle theme">🌓</button>
+    <button id="refresh-btn" onclick="refreshData()">Refresh Data</button>
+  </div>
 </header>
 
 <div class="layout">
@@ -1999,7 +2012,19 @@
     }
   }
 
+  // ── Theme toggle ──────────────────────────────────────────────
+  function toggleTheme() {
+    const root = document.documentElement;
+    const isLight = root.getAttribute('data-theme') === 'light';
+    root.setAttribute('data-theme', isLight ? 'dark' : 'light');
+    localStorage.setItem('theme', isLight ? 'dark' : 'light');
+  }
+
   // ── Init ──────────────────────────────────────────────────────
+  if (localStorage.getItem('theme') === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+  }
+
   fetch('/api/summary')
     .then(r => r.json())
     .then(data => {
