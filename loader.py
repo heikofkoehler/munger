@@ -918,15 +918,22 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
             if not info or not info.get("shortName"):
                 return None
 
+        # FCF-WACC model is not applicable to financials (banks, insurers):
+        # their loan issuance is recorded as cash outflow, making FCF meaningless.
+        if info.get("sector") in ("Financial Services", "Financials"):
+            return None
+
         # FCF logic
         cf = t.cashflow
         fcf_series = cf.loc["Free Cash Flow"] if "Free Cash Flow" in cf.index else None
         if fcf_series is None or fcf_series.empty:
             return None
-        
+
         fcf0 = float(fcf_series.iloc[0])
         if fcf0 < 0 and len(fcf_series) >= 3:
             fcf0 = float(fcf_series.iloc[0:3].mean())
+        if fcf0 <= 0:
+            return None  # Negative FCF produces meaningless DCF; skip
 
         # Capital Structure
         e = info.get("marketCap") or 0
