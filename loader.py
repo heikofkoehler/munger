@@ -960,10 +960,13 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
             except Exception:
                 pass
 
-        # Growth
-        g = info.get("earningsQuarterlyGrowth") or 0.05 # Default 5%
-        if pd.isna(g) or g > 0.30: g = 0.05 # Cap high growth at 5% for stability instead of 30% to be safer
-        if g < 0: g = 0.0 # Clamp negative growth; model uses terminal value for long-run, not contraction
+        # Growth: average quarterly YoY and annual earnings growth if both available
+        g_quarterly = info.get("earningsQuarterlyGrowth")
+        g_annual = info.get("earningsGrowth")
+        valid = [x for x in [g_quarterly, g_annual] if x is not None and not pd.isna(x)]
+        g = sum(valid) / len(valid) if valid else 0.05
+        if g > 0.30: g = 0.30
+        if g < 0: g = 0.0
 
         result = {
             "ticker": ticker_symbol,
