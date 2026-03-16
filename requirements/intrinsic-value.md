@@ -35,11 +35,9 @@ $$Re = Rf + (\beta \times ERP)$$
 
 $$Rd = \frac{\text{Interest Expense}}{\text{Total Debt}} \times (1 - \text{Tax Rate})$$
 
-
 * **WACC Calculation:**
 
 $$WACC = \left( \frac{E}{E+D} \times Re \right) + \left( \frac{D}{E+D} \times Rd \right)$$
-
 
 
 #### **2. 2-Stage Cash Flow Projection**
