@@ -1,6 +1,6 @@
 # Munger
 
-A local-first, high-security portfolio analysis dashboard. Reads holdings from Monarch Money (recommended), Google Sheets, or a local CSV, deduplicates positions across accounts, and serves a web UI with four analysis views.
+A local-first, high-security portfolio analysis dashboard. Reads holdings from Monarch Money (recommended), Google Sheets, or a local CSV, deduplicates positions across accounts, and serves a web UI with deep architectural analysis views.
 
 ## Features
 
@@ -12,6 +12,8 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from M
 - **Concentration risk flags** — any position exceeding a configurable threshold is flagged automatically
 - **Market data enrichment** — dividend yield/rate, EPS, P/E, sector, market cap via yfinance (ticker symbols only leave the machine)
 - **Tax bucket classification** — accounts classified as Taxable / Tax-Deferred / Tax-Exempt by name pattern
+- **Intrinsic Valuation** — automatically calculates 2-stage FCF DCF values and Margin of Safety for individual stocks
+- **Risk & Efficiency** — unpacks ETFs for "True Exposure" mapping and projects wealth gaps based on expense ratios
 - **Local-first** — all financial data stays on your machine after fetch
 
 ## Dashboard
@@ -25,6 +27,15 @@ uvicorn main:app --reload
 ### Portfolio tab
 Net worth hero, allocation bar chart (color-coded by asset class), concentration risk flags, institutions breakdown, full positions table.
 
+### Risk tab
+Look-through analysis of ETFs/Mutual Funds mapping out "True Exposure" (Direct + Indirect) to specific companies.
+
+### Efficiency tab
+Calculates Weighted Expense Ratio, identifies "Red" tier high-fee funds, and projects 10/20/30 year wealth-gaps against benchmark index fees.
+
+### Valuation tab
+Buffett-style Intrinsic Valuation table calculating Free Cash Flow, Debt-to-Equity, ROE, WACC, and Margin of Safety. It even automatically aggregates Intrinsic Value look-through metrics for ETFs.
+
 ### Dividends tab
 Projected annual income hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Annual $/Share · Yield · Projected Income. Sortable columns.
 
@@ -35,6 +46,14 @@ Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show 
 Three-bucket hero (Taxable / Tax-Deferred / Tax-Exempt) with dollar values and portfolio weights, followed by per-bucket account cards with progress bars. Click any account name to see a full holdings detail page (Ticker · Name · Qty · Price/Share · Value · Cost Basis · Gain/Loss · Type) with a back button to return to the overview.
 
 Ticker symbols link to Yahoo Finance (all tickers except cash placeholders).
+
+## Command Line Interface
+
+You can print a quick summary directly to the terminal without starting the web server:
+
+```bash
+python cli.py
+```
 
 ## Setup
 
@@ -53,7 +72,7 @@ python monarch.py --token YOUR_TOKEN
 # saves monarch_response.json locally
 ```
 
-Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. Re-run `monarch.py` whenever you want fresh data, then hit **Refresh Data** in the dashboard.
+Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. Re-run `monarch.py` whenever you want fresh data, then hit **Refresh Data** in the dashboard. If the file is missing, the backend will safely fallback to your spreadsheet or CSV configuration.
 
 ### Google Sheets
 
@@ -75,6 +94,15 @@ The sheet must have these columns:
 | `SHEET_ID` | — | Google Sheet ID (from URL) |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | OAuth client secret file |
 | `CONC_THRESHOLD` | `10.0` | Flag any position exceeding this % of portfolio |
+
+## Testing
+
+The codebase is decomposed into independent modules (`core/`, `data/`, `metrics/`) which are tested via `pytest`.
+
+```bash
+pip install pytest
+pytest tests/
+```
 
 ## Security
 
