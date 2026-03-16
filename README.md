@@ -2,6 +2,8 @@
 
 A local-first, high-security portfolio analysis dashboard. Reads holdings from Monarch Money (recommended), Google Sheets, or a local CSV, deduplicates positions across accounts, and serves a web UI with deep architectural analysis views.
 
+<img src="screenshot.png" width="100%" alt="Munger Dashboard Screenshot">
+
 ## Features
 
 - **Monarch Money integration** — fetches live portfolio via GraphQL API, stores full JSON response locally
