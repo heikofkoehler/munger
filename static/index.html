@@ -557,6 +557,9 @@
 <header>
   <div class="brand"><span>M</span>UNGER</div>
   <div style="display: flex; gap: 1rem; align-items: center;">
+    <select id="portfolio-selector" onchange="switchPortfolio(this.value)" style="background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; padding:4px 8px; font-size:12px; font-weight:500; cursor:pointer;">
+      <option value="">Loading portfolios...</option>
+    </select>
     <button id="theme-btn" onclick="toggleTheme()" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:18px;" title="Toggle theme">🌓</button>
     <button id="refresh-btn" onclick="refreshData()">Refresh Data</button>
   </div>
@@ -731,6 +734,35 @@
   let _activeTab = 'portfolio';
   let _assetFilter = null;
   let _sectorFilter = null;
+
+  // ── Portfolio management ──────────────────────────────────────
+  async function loadPortfolios() {
+    try {
+      const { portfolios, active } = await fetch('/api/portfolios').then(r => r.json());
+      const sel = document.getElementById('portfolio-selector');
+      sel.innerHTML = portfolios.map(p => 
+        `<option value="${p.path || ''}" ${p.path === active ? 'selected' : ''}>${p.name}</option>`
+      ).join('');
+    } catch (err) {
+      console.error('Failed to load portfolios:', err);
+    }
+  }
+
+  async function switchPortfolio(path) {
+    document.getElementById('loading').classList.remove('hidden');
+    document.getElementById('loading').textContent = 'Switching portfolio…';
+    _marketData = null;
+    _taxData = null;
+    try {
+      const data = await fetch(`/api/switch-portfolio?path=${encodeURIComponent(path)}`).then(r => r.json());
+      _summaryData = data;
+      renderDashboard(data);
+      // Reset other views to trigger lazy-load on next switch
+      document.getElementById('loading').classList.add('hidden');
+    } catch (err) {
+      document.getElementById('loading').textContent = 'Failed to switch: ' + err.message;
+    }
+  }
 
   // ── Tab switching ─────────────────────────────────────────────
   function switchTab(name) {
@@ -1993,6 +2025,7 @@
       const data = await fetch('/api/refresh').then(r => r.json());
       _summaryData = data;
       renderDashboard(data);
+      loadPortfolios(); // Reload list in case new files added
       // Re-render current tab if it's not portfolio
       if (_activeTab === 'risk') {
         loadRisk();
@@ -2026,16 +2059,17 @@
     document.documentElement.setAttribute('data-theme', 'light');
   }
 
-  fetch('/api/summary')
-    .then(r => r.json())
-    .then(data => {
-      _summaryData = data;
-      renderDashboard(data);
-      document.getElementById('loading').classList.add('hidden');
-    })
-    .catch(err => {
-      document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
-    });
+  // Load initial data and portfolio list
+  Promise.all([
+    fetch('/api/summary').then(r => r.json()),
+    loadPortfolios()
+  ]).then(([data]) => {
+    _summaryData = data;
+    renderDashboard(data);
+    document.getElementById('loading').classList.add('hidden');
+  }).catch(err => {
+    document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
+  });
 </script>
 </body>
 </html>

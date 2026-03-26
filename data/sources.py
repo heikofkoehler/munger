@@ -62,10 +62,20 @@ def load_from_sheets(sheet_id: str):
     df = pd.DataFrame(data, columns=headers)
     return df
 
-def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None):
+def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, override_path: str = None):
     """
     Dispatcher: load from Monarch JSON, CSV, or Google Sheets (checked in that order).
+    If override_path is provided, it attempts to load that file based on its extension.
     """
+    if override_path and os.path.exists(override_path):
+        if override_path.endswith(".json"):
+            print(f"Loading from override JSON: {override_path}", flush=True)
+            from monarch import load_from_json
+            return load_from_json(override_path)
+        else:
+            print(f"Loading from override CSV: {override_path}", flush=True)
+            return load_from_csv(override_path)
+
     monarch_json = monarch_json or os.environ.get("MONARCH_JSON_PATH")
     csv_path = csv_path or os.environ.get("CSV_PATH")
     sheet_id = sheet_id or os.environ.get("SHEET_ID")

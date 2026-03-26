@@ -31,6 +31,7 @@ app = FastAPI(title="Munger", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 _cache: dict = {}
+_current_source: str = None
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -41,36 +42,36 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": "Internal Server Error", "detail": str(exc)},
     )
 
-def _build_cache() -> None:
+def _build_cache(source_path: str = None) -> None:
+    global _current_source
     try:
-        logger.info("Building cache...")
-        df_raw = load()
+        if source_path:
+            _current_source = source_path
+        
+        logger.info(f"Building cache (source: {_current_source or 'default'})...")
+        df_raw = load(override_path=_current_source)
         df = normalize_asset_class(deduplicate(df_raw))
         risk = calculate_risk_metrics(df)
+        
+        # Clear existing caches
+        _cache.clear()
         
         _cache["summary"] = {
             **calculate_metrics(df),
             "institutions": calculate_institutions(df_raw),
             "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
             "risk_threshold": 10.0,
+            "active_portfolio": _current_source or "Default"
         }
         _cache["df_clean"] = df
         _cache["df_raw"] = df_raw
         _cache["risk"] = risk
         
         save_risk_snapshot(risk)
-        
-        # Clear other lazy caches
-        _cache.pop("market", None)
-        _cache.pop("tax", None)
-        _cache.pop("efficiency", None)
-        _cache.pop("valuation", None)
         logger.info("Cache built successfully.")
     except Exception as e:
         logger.error(f"Error building cache: {e}")
         logger.error(traceback.format_exc())
-        # We don't raise here to allow the server to start even if data loading fails,
-        # but endpoints will return 500 with details.
         _cache["summary"] = None
 
 # Initial build
@@ -80,6 +81,26 @@ _build_cache()
 @app.get("/", include_in_schema=False)
 def root():
     return FileResponse("static/index.html", headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/portfolios")
+def list_portfolios():
+    """List available CSV and JSON portfolios in the root directory."""
+    import os
+    files = [f for f in os.listdir(".") if f.endswith((".csv", ".json")) and not f.startswith(".")]
+    # Add default if configured via env
+    portfolios = [{"name": "Default (Env)", "path": None}]
+    for f in sorted(files):
+        portfolios.append({"name": f, "path": f})
+    return {"portfolios": portfolios, "active": _current_source}
+
+
+@app.get("/api/switch-portfolio")
+def switch_portfolio(path: str = None):
+    if path == "null" or path == "":
+        path = None
+    _build_cache(source_path=path)
+    return _cache.get("summary") or {}
 
 
 @app.get("/api/summary")
@@ -140,5 +161,5 @@ def valuation():
 
 @app.get("/api/refresh")
 def refresh():
-    _build_cache()
+    _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
