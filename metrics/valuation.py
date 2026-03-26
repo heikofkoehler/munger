@@ -184,6 +184,8 @@ def calculate_valuation_metrics(positions: list) -> list:
 
                 holdings = t.funds_data.top_holdings
                 total_intrinsic_ratio = 0.0
+                total_wacc = 0.0
+                total_g = 0.0
                 weight_covered = 0.0
                 
                 for underlying_ticker, row in holdings.iterrows():
@@ -196,17 +198,44 @@ def calculate_valuation_metrics(positions: list) -> list:
                         if u_val and u_inputs["current_price"] > 0:
                             ratio = u_val["intrinsic_price"] / u_inputs["current_price"]
                             total_intrinsic_ratio += ratio * weight
+                            total_wacc += u_val["wacc"] * weight
+                            total_g += u_val["g"] * weight
                             weight_covered += weight
                 
                 if weight_covered == 0: continue
                 
                 avg_ratio = total_intrinsic_ratio / weight_covered
+                avg_wacc = total_wacc / weight_covered
+                avg_g = total_g / weight_covered
+
                 current_price = t.info.get("navPrice") or t.info.get("regularMarketPrice") or t.info.get("previousClose") or 0
                 intrinsic_price = current_price * avg_ratio
                 mos = (1 - (current_price / intrinsic_price)) if intrinsic_price > 0 else -1
 
-                pos_match = [p for p in positions if p.get("ticker") == ticker]
-                total_qty = sum(p.get("quantity") or 0 for p in pos_match)
+                # To make Sensitivity Analysis work for ETFs, we need to provide fcf0, cash, debt, and shares
+                # that result in the same intrinsic price and respond to WACC/G changes similarly.
+                # We'll use a simplified model: eqVal = PV_stage1 + PV_TV, with cash=0, debt=0, shares=1.
+                # We need to find fcf0 such that DCF(fcf0, avg_wacc, avg_g) == intrinsic_price.
+                
+                # Simplified 2-stage DCF to back-calculate fcf0
+                def back_calc_fcf0(target_price, wacc, g, tg):
+                    if target_price <= 0: return 0
+                    pv_factor = 0
+                    fcf_step = 1.0
+                    for t in range(1, 6):
+                        fcf_step *= (1 + g)
+                        pv_factor += fcf_step / ((1 + wacc) ** t)
+                    
+                    cur_tg = tg
+                    if cur_tg >= wacc: cur_tg = wacc - 0.005
+                    tv_factor = (fcf_step * (1 + cur_tg)) / (wacc - cur_tg)
+                    pv_tv_factor = tv_factor / ((1 + wacc) ** 5)
+                    
+                    total_factor = pv_factor + pv_tv_factor
+                    return target_price / total_factor if total_factor > 0 else 0
+
+                tg = min(rf_rate, 0.03)
+                fcf0_pseudo = back_calc_fcf0(intrinsic_price, avg_wacc, avg_g, tg)
 
                 val_data = {
                     "ticker": ticker,
@@ -215,9 +244,15 @@ def calculate_valuation_metrics(positions: list) -> list:
                     "intrinsic_price": round(float(intrinsic_price), 2),
                     "mos": round(float(mos), 4),
                     "quality_score": -1,
-                    "wacc": 0, "g": 0, "fcf0": 0, "cash": 0, "d": 0, "shares": 0,
+                    "wacc": round(float(avg_wacc), 4),
+                    "g": round(float(avg_g), 4),
+                    "fcf0": round(float(fcf0_pseudo), 2),
+                    "cash": 0, "d": 0, "shares": 1,
                     "owner_earnings_ps": 0,
                     "portfolio_owner_earnings": 0,
+                    "discount_rate": round(float(avg_wacc), 4),
+                    "growth_rate": round(float(avg_g), 4),
+                    "terminal_growth_rate": tg,
                 }
                 _valuation_cache[ticker] = val_data
                 results.append(val_data)

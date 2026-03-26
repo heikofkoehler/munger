@@ -818,10 +818,11 @@
       let waccDisplay = '—';
       let gDisplay = '—';
 
+      if (v.wacc > 0) waccDisplay = (v.wacc * 100).toFixed(2) + '%';
+      if (v.g > 0) gDisplay = (v.g * 100).toFixed(1) + '%';
+
       if (v.quality_score !== -1) {
         scoreDisplay = v.quality_score;
-        waccDisplay = (v.wacc * 100).toFixed(2) + '%';
-        gDisplay = (v.g * 100).toFixed(1) + '%';
         scoreTooltip = [
           (v.roe > 0.15 ? '✓' : '✗') + ' ROE > 15% (' + (v.roe*100).toFixed(1) + '%)',
           (v.debt_to_equity < 0.5 ? '✓' : '✗') + ' D/E < 0.5 (' + v.debt_to_equity.toFixed(2) + ')',

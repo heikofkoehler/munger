@@ -46,3 +46,40 @@ def test_calculate_intrinsic_value_negative_current_price():
     result = _calculate_intrinsic_value_detailed(inputs, 0.04)
     # MOS should be 1.0 (100%) when current price is 0 and intrinsic value is positive
     assert result["mos"] == 1.0
+
+def test_pseudo_fcf0_consistency():
+    # Test logic for ETF back-calculation from metrics/valuation.py
+    def back_calc_fcf0(target_price, wacc, g, tg):
+        if target_price <= 0: return 0
+        pv_factor = 0
+        fcf_step = 1.0
+        for t in range(1, 6):
+            fcf_step *= (1 + g)
+            pv_factor += fcf_step / ((1 + wacc) ** t)
+        
+        cur_tg = tg
+        if cur_tg >= wacc: cur_tg = wacc - 0.005
+        tv_factor = (fcf_step * (1 + cur_tg)) / (wacc - cur_tg)
+        pv_tv_factor = tv_factor / ((1 + wacc) ** 5)
+        
+        total_factor = pv_factor + pv_tv_factor
+        return target_price / total_factor if total_factor > 0 else 0
+
+    # Mock inputs
+    target_price = 450.0
+    wacc = 0.08
+    g = 0.06
+    tg = 0.03
+    
+    fcf0 = back_calc_fcf0(target_price, wacc, g, tg)
+    
+    # Now verify that _calculate_intrinsic_value_detailed with these inputs reproduces the target price
+    inputs = {
+        "beta": (wacc - 0.04) / 0.0438, # solving wacc = rf + beta*erp
+        "d": 0, "e": 1000000, "interest_expense": 0, "tax_rate": 0,
+        "fcf0": fcf0, "g": g, "cash": 0, "shares": 1, "current_price": 400
+    }
+    
+    result = _calculate_intrinsic_value_detailed(inputs, 0.04, 0.0438)
+    # Allow some floating point error
+    assert abs(result["intrinsic_price"] - target_price) < 0.1
