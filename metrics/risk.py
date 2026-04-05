@@ -38,10 +38,10 @@ def save_risk_snapshot(risk_data: dict, db_path: str = "risk_history.db"):
     except Exception as e:
         print(f"Error saving risk snapshot: {e}", file=sys.stderr)
 
-def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> dict:
+def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0) -> dict:
     """
     Calculate detailed portfolio efficiency metrics, including wealth gap projections
-    and high-cost asset benchmarking.
+    and high-cost asset benchmarking using asset-by-asset compounding.
     """
     total_value = df["value"].sum()
     if total_value <= 0:
@@ -54,9 +54,11 @@ def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> 
 
     # 1. Individual Asset Analysis
     total_annual_cost = 0.0
-    optimized_annual_cost = 0.0
     high_cost_assets = []
     
+    # Store data for precise projection calculation
+    assets_for_projection = []
+
     for _, row in df.iterrows():
         val = float(row["value"])
         ticker = row["ticker"]
@@ -70,9 +72,6 @@ def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> 
             if exp_ratio > 0:
                 annual_cost = val * exp_ratio
                 total_annual_cost += annual_cost
-                
-                # Optimized cost: cap at benchmark_fee (e.g. 0.05%)
-                optimized_annual_cost += val * min(exp_ratio, benchmark_fee)
                 
                 # Benchmarking
                 status = "Green"
@@ -90,29 +89,33 @@ def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0005) -> 
                     "potential_savings": round(float(potential_savings), 2),
                     "status": status
                 })
-            else:
-                # No fee found (Stock or non-fund cash)
-                optimized_annual_cost += 0.0
-        else:
-            # No ticker
-            optimized_annual_cost += 0.0
+        
+        assets_for_projection.append({"value": val, "exp_ratio": exp_ratio})
 
     wer = total_annual_cost / total_value
-    optimized_wer = optimized_annual_cost / total_value
     
-    # 2. Wealth Gap Projections (10, 20, 30 years)
+    # 2. Wealth Gap Projections (10, 20, 30 years) - Precise Asset-by-Asset
     projections = []
     for years in [10, 20, 30]:
-        # Scenario A: Current (r - f)
-        current_val = total_value * ((1 + (growth_rate - wer)) ** years)
-        # Scenario B: Optimized (r - f_opt)
-        optimized_val = total_value * ((1 + (growth_rate - optimized_wer)) ** years)
-        wealth_gap = optimized_val - current_val
+        current_fv = 0.0
+        benchmark_fv = 0.0
+        
+        for asset in assets_for_projection:
+            v = asset["value"]
+            er = asset["exp_ratio"]
+            
+            # Scenario A: Current (r - individual asset fee)
+            current_fv += v * ((1 + (growth_rate - er)) ** years)
+            
+            # Scenario B: Idealized Benchmark (r - benchmark_fee)
+            benchmark_fv += v * ((1 + (growth_rate - benchmark_fee)) ** years)
+            
+        wealth_gap = benchmark_fv - current_fv
         
         projections.append({
             "years": years,
-            "current_val": round(float(current_val), 2),
-            "optimized_val": round(float(optimized_val), 2),
+            "current_val": round(float(current_fv), 2),
+            "optimized_val": round(float(benchmark_fv), 2),
             "wealth_gap": round(float(wealth_gap), 2)
         })
 
