@@ -757,7 +757,20 @@
       const data = await fetch(`/api/switch-portfolio?path=${encodeURIComponent(path)}`).then(r => r.json());
       _summaryData = data;
       renderDashboard(data);
-      // Reset other views to trigger lazy-load on next switch
+      // Re-render current tab if it's not portfolio
+      if (_activeTab === 'risk') {
+        loadRisk();
+      } else if (_activeTab === 'efficiency') {
+        loadEfficiency();
+      } else if (_activeTab === 'valuation') {
+        loadValuation();
+      } else if (_activeTab === 'dividends') {
+        loadDividends();
+      } else if (_activeTab === 'earnings') {
+        loadEarnings();
+      } else if (_activeTab === 'accounts') {
+        loadAccounts();
+      }
       document.getElementById('loading').classList.add('hidden');
     } catch (err) {
       document.getElementById('loading').textContent = 'Failed to switch: ' + err.message;
