@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from core.config import check_gitignore
 from data.sources import load
+from data.vanguard import download_voo_holdings
 from data.normalization import deduplicate, normalize_asset_class
 from data.market_data import enrich_with_market_data
 from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
@@ -161,5 +162,6 @@ def valuation():
 
 @app.get("/api/refresh")
 def refresh():
+    download_voo_holdings()
     _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
