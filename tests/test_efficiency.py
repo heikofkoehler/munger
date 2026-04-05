@@ -31,7 +31,7 @@ def test_opportunity_cost_calculation_precision(mock_get_fund_details):
     assert result["total_annual_cost"] == 10_000.0
     assert result["weighted_expense_ratio"] == 0.01
     
-    # 4. Verify 10, 20, 30 year projections
+    # 4. Verify 5, 10, 15, 20, 25, 30 year projections
     # Formula: Value * (1 + (r - f))^years
     total_val = 1_000_000.0
     

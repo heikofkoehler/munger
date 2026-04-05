@@ -94,9 +94,9 @@ def calculate_efficiency_metrics(df, growth_rate=0.07, benchmark_fee=0.0) -> dic
 
     wer = total_annual_cost / total_value
     
-    # 2. Wealth Gap Projections (10, 20, 30 years) - Precise Asset-by-Asset
+    # 2. Wealth Gap Projections (5, 10, 15, 20, 25, 30 years) - Precise Asset-by-Asset
     projections = []
-    for years in [10, 20, 30]:
+    for years in [5, 10, 15, 20, 25, 30]:
         current_fv = 0.0
         benchmark_fv = 0.0
         
