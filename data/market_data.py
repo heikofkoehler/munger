@@ -1,4 +1,5 @@
 import sys
+import os
 import yfinance as yf
 import pandas as pd
 from core.database import _yf_db_get, _yf_db_set
@@ -22,7 +23,17 @@ def get_fund_details(ticker: str) -> dict:
         expense_ratio = float(raw_ratio) / 100 if raw_ratio is not None else None
 
         holdings = []
-        if hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
+        
+        # Override for S&P 500 ETFs to use the full top 100 list from our custom CSV
+        csv_path = "vanguard_voo_holdings.csv"
+        if ticker in ["VOO", "VFFSX", "SPY", "IVV"] and os.path.exists(csv_path):
+            df_csv = pd.read_csv(csv_path)
+            # Use top 100
+            for _, row in df_csv.head(100).iterrows():
+                # weight_pct is out of 100, convert to decimal
+                w = float(row["weight_pct"]) / 100.0 if not pd.isna(row["weight_pct"]) else 0.0
+                holdings.append({"ticker": str(row["ticker"]), "weight": w})
+        elif hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
             df_holdings = t.funds_data.top_holdings
             if not df_holdings.empty:
                 # The index is the ticker symbol
