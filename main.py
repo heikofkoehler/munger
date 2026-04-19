@@ -185,41 +185,54 @@ def ticker_detail(symbol: str):
     
     if df_ticker.empty:
         # Fallback to deduplicated summary search if raw failed
+        pos = []
         if "summary" in _cache:
             pos = [p for p in _cache["summary"]["positions"] if p.get("ticker") == symbol]
-            if not pos:
-                return JSONResponse(status_code=404, content={"message": "Ticker not found in portfolio."})
-        else:
-            return JSONResponse(status_code=404, content={"message": "Ticker not found in portfolio."})
             
-    # Process account holdings
+        if not pos:
+            # External ticker (e.g. underlying holding like 'V', 'AAPL')
+            # Fetch a quick name/type via yfinance
+            try:
+                import yfinance as yf
+                info = yf.Ticker(symbol).info
+                security_name = info.get("shortName", symbol)
+                qtype = info.get("quoteType", "")
+                type_display = "ETF" if qtype == "ETF" else "Mutual Fund" if qtype == "MUTUALFUND" else "Stock" if qtype == "EQUITY" else "Unknown"
+            except Exception:
+                security_name = symbol
+                type_display = "Unknown"
+        else:
+            security_name = pos[0].get("security_name", symbol)
+            type_display = pos[0].get("type_display", "Unknown")
+    else:
+        security_name = df_ticker.iloc[0]["security_name"] if not df_ticker.empty else symbol
+        type_display = df_ticker.iloc[0].get("type_display", "Unknown") if not df_ticker.empty else "Unknown"
+
     holdings = []
     total_val = 0.0
     total_basis = 0.0
     total_qty = 0.0
     has_basis = False
     
-    for _, row in df_ticker.iterrows():
-        val = row.get("value", 0.0)
-        qty = row.get("quantity", 0.0)
-        basis = row.get("cost_basis", None)
-        
-        total_val += val
-        total_qty += qty
-        if pd.notna(basis):
-            total_basis += basis
-            has_basis = True
+    if not df_ticker.empty:
+        for _, row in df_ticker.iterrows():
+            val = row.get("value", 0.0)
+            qty = row.get("quantity", 0.0)
+            basis = row.get("cost_basis", None)
             
-        holdings.append({
-            "account_name": row.get("account_name", "Unknown"),
-            "institution_name": row.get("institution_name", "Unknown"),
-            "quantity": qty,
-            "value": val,
-            "cost_basis": basis if pd.notna(basis) else None,
-        })
-        
-    security_name = df_ticker.iloc[0]["security_name"] if not df_ticker.empty else symbol
-    type_display = df_ticker.iloc[0].get("type_display", "Unknown") if not df_ticker.empty else "Unknown"
+            total_val += val
+            total_qty += qty
+            if pd.notna(basis):
+                total_basis += basis
+                has_basis = True
+                
+            holdings.append({
+                "account_name": row.get("account_name", "Unknown"),
+                "institution_name": row.get("institution_name", "Unknown"),
+                "quantity": qty,
+                "value": val,
+                "cost_basis": basis if pd.notna(basis) else None,
+            })
 
     # 2. Enrich with market data for THIS ticker
     pos = {
@@ -239,11 +252,34 @@ def ticker_detail(symbol: str):
     if type_display in ["ETF", "Mutual Fund"]:
         fund_details = get_fund_details(symbol)
         
+    # 4. Indirect holdings via ETFs/Funds in the portfolio
+    indirect_holdings = []
+    if "summary" in _cache:
+        portfolio_positions = _cache["summary"]["positions"]
+        for p in portfolio_positions:
+            ptype = p.get("type_display", "")
+            if ptype in ["ETF", "Mutual Fund"] and p.get("ticker"):
+                p_ticker = p["ticker"]
+                f_details = get_fund_details(p_ticker)
+                if f_details and f_details.get("holdings"):
+                    for h in f_details["holdings"]:
+                        if h["ticker"] == symbol:
+                            indirect_holdings.append({
+                                "etf_ticker": p_ticker,
+                                "etf_name": p.get("security_name", p_ticker),
+                                "weight": h["weight"],
+                                "implied_value": p.get("value", 0.0) * h["weight"]
+                            })
+                            break
+                            
+    indirect_holdings = sorted(indirect_holdings, key=lambda x: x["implied_value"], reverse=True)
+        
     return {
         "ticker": symbol,
         "security_name": security_name,
         "type_display": type_display,
         "holdings": holdings,
+        "indirect_holdings": indirect_holdings,
         "totals": {
             "value": total_val,
             "quantity": total_qty,

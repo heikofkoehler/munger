@@ -2117,15 +2117,34 @@
       let fundHtml = '';
       if (data.type_display === "ETF" || data.type_display === "Mutual Fund") {
         if (f.holdings && f.holdings.length > 0) {
-          const frows = f.holdings.map(h => `<tr><td style="text-align:left" class="td-ticker">${h.ticker}</td><td class="td-num">${fmtPct(h.weight * 100)}</td></tr>`).join('');
+          const frows = f.holdings.map(h => `<tr><td style="text-align:left" class="td-ticker">${tickerLink(h.ticker)}</td><td class="td-num">${fmtPct(h.weight * 100)}</td></tr>`).join('');
           fundHtml = `<div class="card" style="margin-top:1.5rem">
             <div class="card-title">Top Underlying Holdings</div>
             <table style="width:100%;max-width:400px">
-              <thead><tr><th>Ticker</th><th>Weight</th></tr></thead>
+              <thead><tr><th style="padding-left:0.75rem">Ticker</th><th>Weight</th></tr></thead>
               <tbody>${frows}</tbody>
             </table>
           </div>`;
         }
+      }
+
+      let indirectHtml = '';
+      if (data.indirect_holdings && data.indirect_holdings.length > 0) {
+        const irows = data.indirect_holdings.map(ih => {
+          return `<tr>
+            <td style="text-align:left;padding-left:0.75rem" class="td-ticker">${tickerLink(ih.etf_ticker)}</td>
+            <td style="text-align:left;color:var(--text-secondary)">${ih.etf_name}</td>
+            <td class="td-num">${fmtPct(ih.weight * 100)}</td>
+            <td class="td-value">${fmtDollar(ih.implied_value)}</td>
+          </tr>`;
+        }).join('');
+        indirectHtml = `<div class="card" style="margin-top:1.5rem">
+          <div class="card-title">Indirectly Held Via (Portfolio ETFs/Funds)</div>
+          <table>
+            <thead><tr><th style="text-align:left;padding-left:0.75rem">Ticker</th><th style="text-align:left">Fund Name</th><th>Fund Weight</th><th>Implied Value</th></tr></thead>
+            <tbody>${irows}</tbody>
+          </table>
+        </div>`;
       }
 
       const activeTabTitle = _activeTab === 'dividends' ? 'Dividends' :
@@ -2184,6 +2203,7 @@
             </tfoot>
           </table>
         </div>
+        ${indirectHtml}
         ${fundHtml}
       `;
       document.querySelectorAll('#ticker-content table').forEach(makeSortable);
