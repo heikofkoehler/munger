@@ -7,6 +7,7 @@ Run with: uvicorn main:app --reload
 
 import logging
 import traceback
+import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +16,7 @@ from core.config import check_gitignore
 from data.sources import load
 from data.vanguard import download_voo_holdings
 from data.normalization import deduplicate, normalize_asset_class
-from data.market_data import enrich_with_market_data
+from data.market_data import enrich_with_market_data, get_fund_details
 from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot
 from metrics.tax import calculate_tax_buckets
@@ -165,3 +166,89 @@ def refresh():
     download_voo_holdings()
     _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
+
+
+@app.get("/api/ticker/{symbol}")
+def ticker_detail(symbol: str):
+    """
+    Returns data for an individual ticker, including:
+    - Holdings of this ticker across all accounts
+    - Market metrics (yfinance enriched)
+    - Fund details for ETFs (holdings)
+    """
+    if "df_raw" not in _cache:
+        return JSONResponse(status_code=500, content={"message": "Cache not initialized."})
+    
+    # 1. Holdings
+    df_raw = _cache["df_raw"]
+    df_ticker = df_raw[df_raw["ticker"] == symbol]
+    
+    if df_ticker.empty:
+        # Fallback to deduplicated summary search if raw failed
+        if "summary" in _cache:
+            pos = [p for p in _cache["summary"]["positions"] if p.get("ticker") == symbol]
+            if not pos:
+                return JSONResponse(status_code=404, content={"message": "Ticker not found in portfolio."})
+        else:
+            return JSONResponse(status_code=404, content={"message": "Ticker not found in portfolio."})
+            
+    # Process account holdings
+    holdings = []
+    total_val = 0.0
+    total_basis = 0.0
+    total_qty = 0.0
+    has_basis = False
+    
+    for _, row in df_ticker.iterrows():
+        val = row.get("value", 0.0)
+        qty = row.get("quantity", 0.0)
+        basis = row.get("cost_basis", None)
+        
+        total_val += val
+        total_qty += qty
+        if pd.notna(basis):
+            total_basis += basis
+            has_basis = True
+            
+        holdings.append({
+            "account_name": row.get("account_name", "Unknown"),
+            "institution_name": row.get("institution_name", "Unknown"),
+            "quantity": qty,
+            "value": val,
+            "cost_basis": basis if pd.notna(basis) else None,
+        })
+        
+    security_name = df_ticker.iloc[0]["security_name"] if not df_ticker.empty else symbol
+    type_display = df_ticker.iloc[0].get("type_display", "Unknown") if not df_ticker.empty else "Unknown"
+
+    # 2. Enrich with market data for THIS ticker
+    pos = {
+        "ticker": symbol,
+        "security_name": security_name,
+        "type_display": type_display,
+        "value": total_val,
+        "quantity": total_qty,
+        "cost_basis": total_basis if has_basis else None
+    }
+    
+    # Enrich updates the pos dict directly but returns a list.
+    enriched = enrich_with_market_data([pos])[0]
+    
+    # 3. Fund details (if ETF / Mutual Fund)
+    fund_details = None
+    if type_display in ["ETF", "Mutual Fund"]:
+        fund_details = get_fund_details(symbol)
+        
+    return {
+        "ticker": symbol,
+        "security_name": security_name,
+        "type_display": type_display,
+        "holdings": holdings,
+        "totals": {
+            "value": total_val,
+            "quantity": total_qty,
+            "cost_basis": total_basis if has_basis else None
+        },
+        "market": enriched,
+        "fund": fund_details
+    }
