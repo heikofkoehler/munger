@@ -2,13 +2,13 @@
 monarch.py — Monarch Money portfolio fetcher
 
 Fetches portfolio data from Monarch Money's GraphQL API and stores the full
-JSON response locally. Token is obtained from the Monarch UI (open DevTools →
-Network tab → any request → Authorization: Token <value>).
+JSON response locally. Authentication is obtained from the Monarch UI (open DevTools →
+Network tab → any request to graphql → copy the entire 'Cookie' header string).
 
 Usage:
-    python monarch.py                    # uses MONARCH_TOKEN env var
-    python monarch.py --token TOKEN
-    python monarch.py --token TOKEN --output monarch_response.json
+    python monarch.py                    # uses MONARCH_COOKIE env var
+    python monarch.py --cookie COOKIE
+    python monarch.py --cookie COOKIE --output monarch_response.json
 """
 
 import argparse
@@ -101,7 +101,7 @@ query Web_GetPortfolio($portfolioInput: PortfolioInput) {
 """
 
 
-def fetch(token: str, output_path: str = "monarch_response.json") -> dict:
+def fetch(cookie: str, output_path: str = "monarch_response.json") -> dict:
     """
     POST to Monarch GraphQL, save full JSON response to output_path, return parsed dict.
     """
@@ -120,13 +120,22 @@ def fetch(token: str, output_path: str = "monarch_response.json") -> dict:
         },
         "query": _PORTFOLIO_QUERY,
     }
+    csrftoken = ""
+    for part in cookie.split(";"):
+        part = part.strip()
+        if part.startswith("csrftoken="):
+            csrftoken = part.split("=", 1)[1]
+            break
+
     headers = {
         "accept": "*/*",
-        "authorization": f"Token {token}",
         "client-platform": "web",
         "content-type": "application/json",
         "monarch-client": "monarch-core-web-app-graphql",
         "origin": "https://app.monarch.com",
+        "referer": "https://app.monarch.com/",
+        "x-csrftoken": csrftoken,
+        "cookie": cookie,
     }
 
     resp = requests.post(MONARCH_API_URL, json=payload, headers=headers, timeout=30)
@@ -194,7 +203,7 @@ def load_from_json(path: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch Monarch Money portfolio data")
-    parser.add_argument("--token", help="Monarch API token (or set MONARCH_TOKEN env var)")
+    parser.add_argument("--cookie", help="Monarch Cookie string (or set MONARCH_COOKIE env var)")
     parser.add_argument(
         "--output",
         default=os.environ.get("MONARCH_JSON_PATH", "monarch_response.json"),
@@ -202,12 +211,12 @@ def main():
     )
     args = parser.parse_args()
 
-    token = args.token or os.environ.get("MONARCH_TOKEN")
-    if not token:
-        print("ERROR: Provide --token TOKEN or set MONARCH_TOKEN env var", file=sys.stderr)
+    cookie = args.cookie or os.environ.get("MONARCH_COOKIE")
+    if not cookie:
+        print("ERROR: Provide --cookie COOKIE or set MONARCH_COOKIE env var", file=sys.stderr)
         sys.exit(1)
 
-    data = fetch(token, args.output)
+    data = fetch(cookie, args.output)
     df = to_dataframe(data)
 
     perf = data["data"]["portfolio"]["performance"]

@@ -12,6 +12,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from core.config import check_gitignore
 from data.sources import load
 from data.vanguard import download_voo_holdings
