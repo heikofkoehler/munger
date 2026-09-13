@@ -67,12 +67,22 @@ cp .env.example .env
 
 ### Monarch Money (recommended)
 
-Grab your token from the Monarch UI (DevTools → Network → any request → `Authorization: Token <value>`), then fetch fresh data:
+Monarch Money authenticates via session cookies (with CSRF validation). Obtain your session cookie from the Monarch web app:
+
+1. Open [Monarch Money](https://app.monarch.com) in your browser and log in.
+2. Open DevTools (`Cmd + Option + I` or `F12`) → **Network** tab.
+3. Select any request to `graphql`.
+4. In **Request Headers**, copy the entire value of the `Cookie` header.
+
+Fetch fresh data using your cookie:
 
 ```bash
-python monarch.py --token YOUR_TOKEN
-# saves monarch_response.json locally
+python monarch.py --cookie "PASTE_COOKIE_STRING"
+# or set MONARCH_COOKIE in .env and simply run:
+python monarch.py
 ```
+
+*(Token authentication is also supported if you have an active API token: `python monarch.py --token YOUR_TOKEN` or via `MONARCH_TOKEN` in `.env`)*
 
 Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. Re-run `monarch.py` whenever you want fresh data, then hit **Refresh Data** in the dashboard. If the file is missing, the backend will safely fallback to your spreadsheet or CSV configuration.
 
@@ -91,7 +101,8 @@ The sheet must have these columns:
 | Variable | Default | Description |
 |---|---|---|
 | `MONARCH_JSON_PATH` | — | Path to stored Monarch response JSON (highest priority) |
-| `MONARCH_TOKEN` | — | Monarch API token (used by `monarch.py` to fetch fresh data) |
+| `MONARCH_COOKIE` | — | Monarch session cookie string (used by `monarch.py` to fetch fresh data) |
+| `MONARCH_TOKEN` | — | Monarch API token (alternative auth for `monarch.py`) |
 | `CSV_PATH` | — | Local CSV path |
 | `SHEET_ID` | — | Google Sheet ID (from URL) |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | OAuth client secret file |

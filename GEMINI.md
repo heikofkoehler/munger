@@ -69,10 +69,10 @@ static/index.html — multi-panel dashboard
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env   # set MONARCH_JSON_PATH, MONARCH_TOKEN, etc.
+cp .env.example .env   # set MONARCH_JSON_PATH, MONARCH_COOKIE, etc.
 
 # Fetch fresh Monarch data
-python monarch.py --token YOUR_TOKEN
+python monarch.py --cookie "YOUR_COOKIE"  # or set MONARCH_COOKIE in .env and run python monarch.py
 
 # Run the dashboard
 uvicorn main:app --reload
