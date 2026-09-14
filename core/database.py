@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 YF_CACHE_DB = "market_data.db"
-_YF_TTL = {"market": 24, "valuation": 720}  # hours per data type (24h for market prices, 30 days for financial statements)
+_YF_TTL = {"market": 24, "valuation": 720, "diversification": 24}  # hours per data type (24h for market/div, 30 days for financial statements)
 
 def _yf_db_get(ticker: str, data_type: str, allow_stale: bool = False) -> Optional[dict]:
     """Return cached yfinance data if present and within TTL (or if allow_stale=True), else None."""

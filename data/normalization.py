@@ -102,7 +102,7 @@ def deduplicate(df):
     result = meta.join(numeric).reset_index(drop=True)
     return result
 
-CASH_TICKERS = {"FCASH", "CUR:USD", "SPAXX", "FDRXX"}
+CASH_TICKERS = {"FCASH", "CUR:USD", "CUR-USD", "USD-USD", "USD", "SPAXX", "FDRXX"}
 FIXED_INCOME_TICKERS = {"VCSH", "VGSH", "BND", "AGG", "VBTIX"}
 MUTUAL_FUND_TICKERS = {"VFFSX"}
 

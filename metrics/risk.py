@@ -3,8 +3,10 @@ import sys
 import sqlite3
 from datetime import datetime
 import pandas as pd
+import numpy as np
+from core.database import _yf_db_get, _yf_db_set
 from data.market_data import get_fund_details
-from data.normalization import normalize_ticker
+from data.normalization import normalize_ticker, CASH_TICKERS
 
 CONC_THRESHOLD = float(os.environ.get("CONC_THRESHOLD", 10.0))
 
@@ -215,12 +217,258 @@ def calculate_risk_metrics(df) -> dict:
 
     true_exposure.sort(key=lambda x: x["weight_pct"], reverse=True)
 
+    div_metrics = calculate_diversification_metrics(df)
+
     return {
         "true_exposure": true_exposure,
         "wer": round(float(wer), 6),
         "total_annual_cost": round(float(total_annual_cost), 2),
         "threshold": CONC_THRESHOLD,
+        "diversification": div_metrics,
     }
+
+def calculate_diversification_metrics(df: pd.DataFrame, period: str = "1y") -> dict:
+    """
+    Calculate portfolio diversification and risk-adjusted efficiency metrics
+    using historical return data from yfinance.
+
+    Returns:
+        portfolio_volatility: annualized portfolio volatility (%)
+        weighted_asset_volatility: weighted average individual asset volatility (%)
+        volatility_reduction_pct: % reduction in volatility from non-correlation
+        diversification_ratio: weighted_vol / portfolio_vol (e.g. 1.55x)
+        avg_pairwise_correlation: weighted average pairwise correlation
+        annualized_return: 1-year historical annualized return (%)
+        sharpe_ratio: excess return / portfolio vol (Rf = 4.5%)
+        effective_holdings: 1 / sum(w^2) (inverse HHI)
+        top5_concentration: % of portfolio in top 5 assets
+        top10_concentration: % of portfolio in top 10 assets
+        hhi: Herfindahl-Hirschman Index
+        risk_contributions: list of per-asset risk contribution metrics
+    """
+    default_res = {
+        "portfolio_volatility": None,
+        "weighted_asset_volatility": None,
+        "volatility_reduction_pct": None,
+        "diversification_ratio": None,
+        "avg_pairwise_correlation": None,
+        "annualized_return": None,
+        "sharpe_ratio": None,
+        "effective_holdings": 0.0,
+        "top5_concentration": 0.0,
+        "top10_concentration": 0.0,
+        "hhi": 0.0,
+        "risk_contributions": [],
+    }
+
+    if df is None or df.empty or "value" not in df.columns:
+        return default_res
+
+    # Aggregate positions by normalized ticker
+    pos_map = {}
+    names_map = {}
+    cash_tickers = set(CASH_TICKERS)
+    for _, row in df.iterrows():
+        val = float(pd.to_numeric(row.get("value", 0), errors="coerce") or 0)
+        if val < 0.01:
+            continue
+        raw_t = str(row.get("ticker") or "").strip()
+        if not raw_t or raw_t.lower() == "nan":
+            raw_t = f"UNKNOWN_{row.get('security_id', '')}"
+        t = normalize_ticker(raw_t).replace(".", "-")
+        pos_map[t] = pos_map.get(t, 0.0) + val
+        if t not in names_map:
+            names_map[t] = str(row.get("security_name") or t)
+        if str(row.get("type_display", "")).strip() == "Cash":
+            cash_tickers.add(t)
+
+    total_val = sum(pos_map.values())
+    if total_val <= 0 or not pos_map:
+        return default_res
+
+    weights = {t: val / total_val for t, val in pos_map.items()}
+    sorted_weights = sorted(weights.values(), reverse=True)
+
+    # 1. Breadth Metrics (always computable without external APIs)
+    sum_sq_w = sum(w**2 for w in sorted_weights)
+    effective_holdings = round(1.0 / sum_sq_w, 1) if sum_sq_w > 0 else 0.0
+    hhi = round(sum((w * 100.0)**2 for w in sorted_weights), 1)
+    top5_conc = round(sum(sorted_weights[:5]) * 100.0, 2)
+    top10_conc = round(sum(sorted_weights[:10]) * 100.0, 2)
+
+    top_items = sorted(pos_map.items(), key=lambda x: x[1], reverse=True)[:10]
+    cache_key = "PORTFOLIO_DIV_" + "_".join(f"{t}:{round(v/total_val, 3)}" for t, v in top_items)
+
+    cached = _yf_db_get(cache_key, "diversification")
+    if cached:
+        return cached
+
+    # 2. Historical Daily Return Analysis via yfinance
+    try:
+        import yfinance as yf
+
+        # Identify traded tickers (exclude pure cash sweeps)
+        traded_tickers = [
+            t for t in pos_map
+            if t not in cash_tickers
+            and not t.startswith("UNKNOWN")
+            and not (t.startswith("Q") and len(t) == 5)
+            and not t.startswith("CUR")
+            and "USD" not in t
+        ]
+
+        if not traded_tickers:
+            raise ValueError("No traded tickers available")
+
+        # Download historical prices
+        data = yf.download(traded_tickers, period=period, interval="1d", progress=False)
+        if data is None or data.empty:
+            raise ValueError("Empty response from yfinance")
+
+        if "Close" in data:
+            prices = data["Close"]
+        elif "Adj Close" in data:
+            prices = data["Adj Close"]
+        else:
+            raise ValueError("No Close or Adj Close price series found")
+
+        if isinstance(prices, pd.Series):
+            prices = prices.to_frame(name=traded_tickers[0])
+
+        # Drop any failed columns
+        prices = prices.dropna(axis=1, how="all").ffill().dropna()
+        if len(prices) < 15:
+            raise ValueError("Insufficient trading day history (<15 days)")
+
+        returns = prices.pct_change().dropna()
+        valid_tickers = [t for t in traded_tickers if t in returns.columns and not returns[t].isna().all()]
+        if not valid_tickers:
+            raise ValueError("No valid returns found")
+
+        combined_returns = returns[valid_tickers].copy()
+        N_days = len(combined_returns)
+
+        # Handle cash bucket: 0 volatility and 0 correlation with equities
+        cash_val = sum(pos_map[t] for t in pos_map if t not in valid_tickers)
+        if cash_val > 0.01:
+            combined_returns["CASH"] = 0.0
+            all_model_tickers = valid_tickers + ["CASH"]
+            model_weights = np.array([pos_map[t] / total_val for t in valid_tickers] + [cash_val / total_val])
+        else:
+            all_model_tickers = valid_tickers
+            model_weights = np.array([pos_map[t] / total_val for t in valid_tickers])
+
+        # Normalize weights
+        model_weights = model_weights / model_weights.sum()
+
+        cov_daily = combined_returns.cov().values
+        corr_matrix = combined_returns.corr().values
+        cov_annual = cov_daily * 252.0
+
+        # Portfolio Volatility
+        port_var = float(model_weights.T @ cov_annual @ model_weights)
+        port_vol = float(np.sqrt(max(0.0, port_var)))
+
+        # Asset Volatilities
+        asset_vols = np.sqrt(np.maximum(0.0, np.diag(cov_annual)))
+        weighted_asset_vol = float(np.sum(model_weights * asset_vols))
+
+        # Diversification Ratio & Reduction %
+        dr = round(weighted_asset_vol / port_vol, 2) if port_vol > 0.0001 else 1.0
+        vol_reduction = round((1.0 - port_vol / weighted_asset_vol) * 100.0, 1) if weighted_asset_vol > 0.0001 else 0.0
+
+        # Weighted Average Pairwise Correlation
+        M = len(all_model_tickers)
+        weighted_corr_sum = 0.0
+        norm_denom = 0.0
+        for i in range(M):
+            for j in range(M):
+                if i != j:
+                    w_prod = model_weights[i] * model_weights[j]
+                    c_val = corr_matrix[i, j]
+                    weighted_corr_sum += w_prod * (c_val if not np.isnan(c_val) else 0.0)
+                    norm_denom += w_prod
+        avg_corr = round(float(weighted_corr_sum / norm_denom), 2) if norm_denom > 0 else 0.0
+
+        # Marginal Contribution to Risk
+        mcr = (model_weights * (cov_annual @ model_weights)) / port_var if port_var > 0 else np.zeros_like(model_weights)
+
+        # 1Y Annualized Portfolio Return & Sharpe
+        cum_returns = (1.0 + combined_returns).prod() ** (252.0 / N_days) - 1.0
+        port_ann_return = float(np.sum(model_weights * cum_returns.values))
+        rf = 0.045
+        sharpe = round((port_ann_return - rf) / port_vol, 2) if port_vol > 0.0001 else 0.0
+
+        # Risk Contributions Breakdown
+        risk_contributions = []
+        for i, t in enumerate(all_model_tickers):
+            w_pct = round(float(model_weights[i] * 100.0), 2)
+            r_pct = round(float(mcr[i] * 100.0), 2)
+            v_pct = round(float(asset_vols[i] * 100.0), 1)
+
+            if t == "CASH":
+                name = "Cash & Stable Reserves"
+                role = "Risk Anchor"
+            else:
+                name = names_map.get(t, t)
+                if r_pct > w_pct * 1.25:
+                    role = "Risk Driver"
+                elif r_pct < w_pct * 0.50:
+                    role = "Risk Anchor"
+                else:
+                    role = "Balanced"
+
+            risk_contributions.append({
+                "ticker": t,
+                "security_name": name,
+                "weight_pct": w_pct,
+                "risk_contrib_pct": r_pct,
+                "volatility_pct": v_pct,
+                "role": role,
+            })
+
+        risk_contributions.sort(key=lambda x: x["risk_contrib_pct"], reverse=True)
+
+        result = {
+            "portfolio_volatility": round(port_vol * 100.0, 2),
+            "weighted_asset_volatility": round(weighted_asset_vol * 100.0, 2),
+            "volatility_reduction_pct": vol_reduction,
+            "diversification_ratio": dr,
+            "avg_pairwise_correlation": avg_corr,
+            "annualized_return": round(port_ann_return * 100.0, 2),
+            "sharpe_ratio": sharpe,
+            "effective_holdings": effective_holdings,
+            "top5_concentration": top5_conc,
+            "top10_concentration": top10_conc,
+            "hhi": hhi,
+            "risk_contributions": risk_contributions,
+        }
+
+        _yf_db_set(cache_key, "diversification", result)
+        return result
+
+    except Exception as e:
+        print(f"calculate_diversification_metrics fetch error: {e}", file=sys.stderr)
+        # Fallback to stale cache if available
+        stale = _yf_db_get(cache_key, "diversification", allow_stale=True)
+        if stale:
+            return stale
+
+        # Fallback with breadth metrics if offline
+        return {
+            "portfolio_volatility": None,
+            "weighted_asset_volatility": None,
+            "volatility_reduction_pct": None,
+            "diversification_ratio": None,
+            "avg_pairwise_correlation": None,
+            "annualized_return": None,
+            "sharpe_ratio": None,
+            "effective_holdings": effective_holdings,
+            "top5_concentration": top5_conc,
+            "top10_concentration": top10_conc,
+            "hhi": hhi,
+            "risk_contributions": [],
+        }
 
 def check_concentration(df) -> list:
     """

@@ -1692,17 +1692,8 @@
   function renderRisk(data) {
     if (!data || !data.risk) return;
     const risk = data.risk;
+    const div = risk.diversification || {};
     const panel = document.getElementById('risk-content');
-
-    // Portfolio Efficiency Score (100 - (WER * 10000) capped at 0-100)
-    // Benchmark: 0.10% (10 bps) = 90 score, 0.50% (50 bps) = 50 score
-    const wer = risk.wer || 0;
-    const totalCost = risk.total_annual_cost || 0;
-    const werPct = wer * 100;
-    const efficiencyScore = Math.max(0, Math.min(100, 100 - (werPct * 100)));
-    let scoreColor = 'var(--accent-teal)';
-    if (efficiencyScore < 70) scoreColor = 'var(--accent-amber)';
-    if (efficiencyScore < 40) scoreColor = 'var(--accent-red)';
 
     const trueExposures = risk.true_exposure.map(f => {
       const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
@@ -1804,46 +1795,203 @@
         </div>`;
     }).join('');
 
-    panel.innerHTML = `
-        <div class="card">
-          <div class="treemap-header">
-            <div>
-              <div class="card-title" style="margin-bottom:0.25rem">Concentration Heatmap (True Exposure)</div>
-              <div style="font-size:12px;color:var(--text-muted)">
-                Tile size proportional to true portfolio weight · Color reflects concentration risk relative to 10% threshold · Click tile for details
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap">
-              <div class="treemap-legend">
-                <div class="treemap-legend-item">
-                  <div class="treemap-legend-dot" style="background:var(--accent-red)"></div>
-                  <span>&gt;10% Concentration Alert</span>
-                </div>
-                <div class="treemap-legend-item">
-                  <div class="treemap-legend-dot" style="background:var(--accent-amber)"></div>
-                  <span>5%–10% Elevated</span>
-                </div>
-                <div class="treemap-legend-item">
-                  <div class="treemap-legend-dot" style="background:var(--accent-blue)"></div>
-                  <span>2%–5% Moderate</span>
-                </div>
-                <div class="treemap-legend-item">
-                  <div class="treemap-legend-dot" style="background:var(--accent-purple)"></div>
-                  <span>&lt;2% Diversified</span>
-                </div>
-              </div>
-              <div class="tax-rate-selector">
-                <button class="tax-rate-pill ${_treemapLimit === 25 ? 'active' : ''}" onclick="setTreemapLimit(25)">Top 25</button>
-                <button class="tax-rate-pill ${_treemapLimit === 50 ? 'active' : ''}" onclick="setTreemapLimit(50)">Top 50</button>
-                <button class="tax-rate-pill ${_treemapLimit === 0 ? 'active' : ''}" onclick="setTreemapLimit(0)">All Exposures</button>
-              </div>
-            </div>
+    // Top 4 KPI Cards
+    const hasDivMetrics = div.diversification_ratio != null;
+    const kpiCardsHtml = hasDivMetrics ? `
+      <div class="grid-4" style="margin-bottom:1.5rem">
+        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+          <div style="display:flex; justify-content:space-between; align-items:baseline">
+            <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Diversification Ratio</div>
+            <span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-size:10px;font-weight:600">
+              ${div.diversification_ratio >= 1.35 ? 'High Benefit' : 'Moderate'}
+            </span>
           </div>
-
-          <div class="treemap-stage">
-            ${tilesHtml}
+          <div class="hero-value" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
+            ${fmtNum(div.diversification_ratio)}x
+          </div>
+          <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
+            <strong style="color:var(--text-primary)">${fmtNum(div.volatility_reduction_pct)}%</strong> volatility slashed by non-correlation
           </div>
         </div>
+
+        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+          <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Portfolio Volatility (1Y)</div>
+          <div class="hero-value" style="font-size:26px; color:var(--accent-blue); margin-top:0.4rem; text-align:left">
+            ${fmtNum(div.portfolio_volatility)}%
+          </div>
+          <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
+            vs ${fmtNum(div.weighted_asset_volatility)}% weighted individual asset vol
+          </div>
+        </div>
+
+        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+          <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Avg Pairwise Correlation</div>
+          <div class="hero-value" style="font-size:26px; color:var(--text-primary); margin-top:0.4rem; text-align:left">
+            ${fmtNum(div.avg_pairwise_correlation)}
+          </div>
+          <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
+            ${div.avg_pairwise_correlation < 0.35 ? 'Low systemic co-movement across assets' : 'Moderate cross-asset co-movement'}
+          </div>
+        </div>
+
+        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+          <div style="display:flex; justify-content:space-between; align-items:baseline">
+            <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Sharpe Ratio (1Y)</div>
+            <span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-size:10px;font-weight:600">
+              ${div.sharpe_ratio >= 1.0 ? 'Strong' : 'Moderate'}
+            </span>
+          </div>
+          <div class="hero-value" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
+            ${fmtNum(div.sharpe_ratio)}
+          </div>
+          <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
+            Annualized return: <strong style="color:var(--text-primary)">+${fmtNum(div.annualized_return)}%</strong> · Rf=4.5%
+          </div>
+        </div>
+      </div>
+    ` : '';
+
+    // Breadth Banner
+    const breadthHtml = `
+      <div class="card" style="margin-bottom:1.5rem; padding:1.25rem 1.5rem">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.5rem">
+          <div>
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Effective Holdings (N_eff)</div>
+            <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
+              ${fmtNum(div.effective_holdings, 1)} <span style="font-size:13px; font-weight:400; color:var(--text-muted)">equal-sized bets (out of ${risk.true_exposure ? risk.true_exposure.length : 25} positions)</span>
+            </div>
+          </div>
+          <div style="border-left:1px solid var(--border); padding-left:1.5rem">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Top 5 Concentration</div>
+            <div style="font-size:22px; font-weight:700; color:${div.top5_concentration > 60 ? 'var(--accent-amber)' : 'var(--text-primary)'}; margin-top:0.25rem">
+              ${fmtNum(div.top5_concentration)}%
+            </div>
+          </div>
+          <div style="border-left:1px solid var(--border); padding-left:1.5rem">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Top 10 Concentration</div>
+            <div style="font-size:22px; font-weight:700; color:${div.top10_concentration > 80 ? 'var(--accent-amber)' : 'var(--text-primary)'}; margin-top:0.25rem">
+              ${fmtNum(div.top10_concentration)}%
+            </div>
+          </div>
+          <div style="border-left:1px solid var(--border); padding-left:1.5rem">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Herfindahl Index (HHI)</div>
+            <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
+              ${fmtNum(div.hhi, 0)} <span style="font-size:12px; font-weight:500; color:var(--text-muted)">(${div.hhi < 1000 ? 'Diversified' : (div.hhi < 1800 ? 'Moderate' : 'Concentrated')})</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // Risk Contributions Table
+    let riskContribCard = '';
+    if (div.risk_contributions && div.risk_contributions.length > 0) {
+      const maxVal = Math.max(...div.risk_contributions.map(rc => Math.max(rc.weight_pct, rc.risk_contrib_pct)), 1);
+      const riskContribRows = div.risk_contributions.map(rc => {
+        const ticker = tickerLink(rc.ticker);
+        const roleBadge = rc.role === 'Risk Driver'
+          ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Risk Driver</span>`
+          : rc.role === 'Risk Anchor'
+          ? `<span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">Risk Anchor</span>`
+          : `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Balanced</span>`;
+
+        const wBarWidth = Math.min(100, (rc.weight_pct / maxVal) * 100);
+        const rBarWidth = Math.max(0, Math.min(100, (rc.risk_contrib_pct / maxVal) * 100));
+
+        return `<tr>
+          <td class="td-ticker">${ticker}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num" style="font-weight:700; color:${rc.risk_contrib_pct > rc.weight_pct * 1.25 ? 'var(--accent-red)' : (rc.risk_contrib_pct < rc.weight_pct * 0.5 ? 'var(--accent-purple)' : 'inherit')}">
+            ${fmtPct(rc.risk_contrib_pct)}
+          </td>
+          <td>
+            <div style="font-size:10px; display:flex; justify-content:space-between; margin-bottom:2px; color:var(--text-muted)">
+              <span>Value: ${rc.weight_pct.toFixed(1)}%</span>
+              <span>Risk: ${rc.risk_contrib_pct.toFixed(1)}%</span>
+            </div>
+            <div style="height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden; margin-bottom:2px">
+              <div style="width:${wBarWidth}%; background:var(--accent-blue); height:100%" title="Weight: ${rc.weight_pct}%"></div>
+            </div>
+            <div style="height:6px; background:var(--bg-secondary); border-radius:3px; overflow:hidden">
+              <div style="width:${rBarWidth}%; background:${rc.risk_contrib_pct > rc.weight_pct ? 'var(--accent-red)' : 'var(--accent-purple)'}; height:100%" title="Risk Contrib: ${rc.risk_contrib_pct}%"></div>
+            </div>
+          </td>
+          <td class="td-num">${rc.volatility_pct != null ? rc.volatility_pct.toFixed(1) + '%' : '—'}</td>
+          <td>${roleBadge}</td>
+        </tr>`;
+      }).join('');
+
+      riskContribCard = `
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title" style="display:flex; justify-content:space-between; align-items:baseline">
+            <span>Risk Contribution vs. Portfolio Weight</span>
+            <span style="font-size:12px; color:var(--text-muted); font-weight:normal">Compares % of portfolio value to marginal contribution to total variance</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Ticker</th>
+                <th>Name</th>
+                <th>Portfolio Weight</th>
+                <th>Risk Contribution</th>
+                <th style="min-width:180px">Value vs. Risk Share</th>
+                <th>Asset Volatility</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${riskContribRows}
+            </tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    panel.innerHTML = `
+      ${kpiCardsHtml}
+      ${breadthHtml}
+      ${riskContribCard}
+
+      <div class="card">
+        <div class="treemap-header">
+          <div>
+            <div class="card-title" style="margin-bottom:0.25rem">Concentration Heatmap (True Exposure)</div>
+            <div style="font-size:12px;color:var(--text-muted)">
+              Tile size proportional to true portfolio weight · Color reflects concentration risk relative to 10% threshold · Click tile for details
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap">
+            <div class="treemap-legend">
+              <div class="treemap-legend-item">
+                <div class="treemap-legend-dot" style="background:var(--accent-red)"></div>
+                <span>&gt;10% Concentration Alert</span>
+              </div>
+              <div class="treemap-legend-item">
+                <div class="treemap-legend-dot" style="background:var(--accent-amber)"></div>
+                <span>5%–10% Elevated</span>
+              </div>
+              <div class="treemap-legend-item">
+                <div class="treemap-legend-dot" style="background:var(--accent-blue)"></div>
+                <span>2%–5% Moderate</span>
+              </div>
+              <div class="treemap-legend-item">
+                <div class="treemap-legend-dot" style="background:var(--accent-purple)"></div>
+                <span>&lt;2% Diversified</span>
+              </div>
+            </div>
+            <div class="tax-rate-selector">
+              <button class="tax-rate-pill ${_treemapLimit === 25 ? 'active' : ''}" onclick="setTreemapLimit(25)">Top 25</button>
+              <button class="tax-rate-pill ${_treemapLimit === 50 ? 'active' : ''}" onclick="setTreemapLimit(50)">Top 50</button>
+              <button class="tax-rate-pill ${_treemapLimit === 0 ? 'active' : ''}" onclick="setTreemapLimit(0)">All Exposures</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="treemap-stage">
+          ${tilesHtml}
+        </div>
+      </div>
 
       <div class="card">
         <div class="card-title">Aggregated Single-Stock Concentration (True Exposure)</div>
