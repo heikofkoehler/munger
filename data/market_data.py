@@ -6,6 +6,19 @@ from core.database import _yf_db_get, _yf_db_set
 
 _fund_cache: dict = {}  # keyed by ticker
 
+DEFAULT_FUND_EXPENSE_RATIOS: dict = {
+    "VOO": 0.0003,
+    "VFFSX": 0.0001,
+    "SCHF": 0.0006,
+    "VCSH": 0.0004,
+    "VGSH": 0.0004,
+    "VBTIX": 0.00035,
+    "SPY": 0.0009,
+    "IVV": 0.0003,
+    "BND": 0.0003,
+    "AGG": 0.0003,
+}
+
 def get_fund_details(ticker: str) -> dict:
     """
     Fetch expense ratio and top holdings for a fund ticker.
@@ -14,39 +27,41 @@ def get_fund_details(ticker: str) -> dict:
     if ticker in _fund_cache:
         return _fund_cache[ticker]
 
+    holdings = []
+    expense_ratio = DEFAULT_FUND_EXPENSE_RATIOS.get(ticker)
+
+    # 1. Check local CSV override for S&P 500 index funds first (guaranteed look-through)
+    csv_path = "vanguard_voo_holdings.csv"
+    if ticker in ["VOO", "VFFSX", "SPY", "IVV"] and os.path.exists(csv_path):
+        try:
+            df_csv = pd.read_csv(csv_path)
+            for _, row in df_csv.head(100).iterrows():
+                w = float(row["weight_pct"]) / 100.0 if not pd.isna(row["weight_pct"]) else 0.0
+                holdings.append({"ticker": str(row["ticker"]), "weight": w})
+        except Exception as e:
+            print(f"Error reading {csv_path}: {e}", file=sys.stderr)
+
+    # 2. Attempt yfinance enrichment for expense ratio and holdings if needed
     try:
         t = yf.Ticker(ticker)
         info = t.info
         raw_ratio = info.get("netExpenseRatio") or info.get("expenseRatio")
-        # yfinance returns these as percentages (e.g. 0.03 for 0.03%), 
-        # so divide by 100 for decimal representation (0.0003)
-        expense_ratio = float(raw_ratio) / 100 if raw_ratio is not None else None
+        if raw_ratio is not None:
+            expense_ratio = float(raw_ratio) / 100
 
-        holdings = []
-        
-        # Override for S&P 500 ETFs to use the full top 100 list from our custom CSV
-        csv_path = "vanguard_voo_holdings.csv"
-        if ticker in ["VOO", "VFFSX", "SPY", "IVV"] and os.path.exists(csv_path):
-            df_csv = pd.read_csv(csv_path)
-            # Use top 100
-            for _, row in df_csv.head(100).iterrows():
-                # weight_pct is out of 100, convert to decimal
-                w = float(row["weight_pct"]) / 100.0 if not pd.isna(row["weight_pct"]) else 0.0
-                holdings.append({"ticker": str(row["ticker"]), "weight": w})
-        elif hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
+        if not holdings and hasattr(t, "funds_data") and t.funds_data.top_holdings is not None:
             df_holdings = t.funds_data.top_holdings
             if not df_holdings.empty:
-                # The index is the ticker symbol
                 for symbol, row in df_holdings.iterrows():
                     weight = row.get("Holding Percent") or row.get("Weight") or 0.0
                     holdings.append({"ticker": str(symbol), "weight": float(weight)})
+    except Exception:
+        # Fallback to defaults already set above
+        pass
 
-        res = {"expense_ratio": expense_ratio, "holdings": holdings}
-        _fund_cache[ticker] = res
-        return res
-    except Exception as e:
-        print(f"Error fetching fund details for {ticker}: {e}", file=sys.stderr)
-        return {"expense_ratio": None, "holdings": []}
+    res = {"expense_ratio": expense_ratio, "holdings": holdings}
+    _fund_cache[ticker] = res
+    return res
 
 YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
 _market_cache: dict = {}  # keyed by ticker string

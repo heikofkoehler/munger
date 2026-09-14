@@ -240,6 +240,100 @@
       margin-top: 0.25rem;
     }
 
+    /* ── Treemap Concentration Heatmap ───────────────────────── */
+    .treemap-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .treemap-legend {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+    .treemap-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .treemap-legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+    .treemap-stage {
+      position: relative;
+      width: 100%;
+      height: 440px;
+      background: var(--bg-card-2);
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    .treemap-tile {
+      position: absolute;
+      box-sizing: border-box;
+      border-radius: 4px;
+      padding: 8px 10px;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      overflow: hidden;
+      color: #ffffff;
+      transition: filter 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+      user-select: none;
+    }
+    .treemap-tile:hover {
+      filter: brightness(1.2);
+      transform: scale(1.008);
+      z-index: 10;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    .treemap-tile-ticker {
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      line-height: 1.1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .treemap-tile-name {
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.85);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .treemap-tile-weight {
+      font-weight: 700;
+      line-height: 1.1;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    }
+    .treemap-tile-value {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.9);
+      font-variant-numeric: tabular-nums;
+    }
+    .treemap-tile-pill {
+      font-size: 9px;
+      font-weight: 600;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: rgba(255, 255, 255, 0.85);
+      margin-top: 3px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
     /* ── Allocation bars ─────────────────────────────────────── */
     .alloc-row {
       display: grid;
@@ -1515,6 +1609,85 @@
     document.querySelectorAll('#panel-portfolio table').forEach(makeSortable);
   }
 
+  let _treemapLimit = 25; // 25, 50, or 0 (all)
+
+  function setTreemapLimit(lim) {
+    _treemapLimit = lim;
+    if (_summaryData && _summaryData.risk) {
+      renderRisk(_summaryData);
+    }
+  }
+
+  function _computeSquarifiedTreemap(items, width, height) {
+    const total = items.reduce((s, it) => s + (it.value || 0), 0);
+    if (total <= 0 || width <= 0 || height <= 0) return [];
+
+    const data = items
+      .filter(it => it.value > 0)
+      .map(it => ({ raw: it, area: (it.value / total) * (width * height) }))
+      .sort((a, b) => b.area - a.area);
+
+    const rects = [];
+
+    function worst(row, w) {
+      if (!row.length || w <= 0) return Infinity;
+      const s = row.reduce((sum, r) => sum + r.area, 0);
+      if (s <= 0) return Infinity;
+      let maxA = -Infinity, minA = Infinity;
+      for (const r of row) {
+        if (r.area > maxA) maxA = r.area;
+        if (r.area < minA) minA = r.area;
+      }
+      const w2 = w * w;
+      const s2 = s * s;
+      return Math.max((w2 * maxA) / s2, s2 / (w2 * minA));
+    }
+
+    function layoutRow(row, rx, ry, rw, rh) {
+      const s = row.reduce((sum, r) => sum + r.area, 0);
+      if (rw >= rh) {
+        const colW = rh > 0 ? (s / rh) : 0;
+        let curY = ry;
+        for (const r of row) {
+          const itemH = colW > 0 ? (r.area / colW) : 0;
+          rects.push({ item: r.raw, x: rx, y: curY, w: colW, h: itemH });
+          curY += itemH;
+        }
+        return [rx + colW, ry, rw - colW, rh];
+      } else {
+        const rowH = rw > 0 ? (s / rw) : 0;
+        let curX = rx;
+        for (const r of row) {
+          const itemW = rowH > 0 ? (r.area / rowH) : 0;
+          rects.push({ item: r.raw, x: curX, y: ry, w: itemW, h: rowH });
+          curX += itemW;
+        }
+        return [rx, ry + rowH, rw, rh - rowH];
+      }
+    }
+
+    let curX = 0, curY = 0, curW = width, curH = height;
+    let row = [];
+
+    for (const d of data) {
+      const side = Math.min(curW, curH);
+      if (!row.length) {
+        row.push(d);
+      } else if (worst([...row, d], side) <= worst(row, side)) {
+        row.push(d);
+      } else {
+        [curX, curY, curW, curH] = layoutRow(row, curX, curY, curW, curH);
+        row = [d];
+      }
+    }
+
+    if (row.length) {
+      layoutRow(row, curX, curY, curW, curH);
+    }
+
+    return rects;
+  }
+
   // ── Risk renderer ─────────────────────────────────────────────
   function renderRisk(data) {
     if (!data || !data.risk) return;
@@ -1552,23 +1725,123 @@
         </tr>`;
     }).join('');
 
+    // Compute Squarified Treemap layout
+    let treemapItems = risk.true_exposure || [];
+    if (_treemapLimit > 0) {
+      treemapItems = treemapItems.slice(0, _treemapLimit);
+    }
+
+    const baseW = 1000;
+    const baseH = 440;
+    const rects = _computeSquarifiedTreemap(treemapItems, baseW, baseH);
+
+    const tilesHtml = rects.map(r => {
+      const f = r.item;
+      const isFlagged = f.weight_pct > (risk.threshold || 10.0);
+      const isElevated = !isFlagged && f.weight_pct >= 5.0;
+      const isModerate = !isFlagged && !isElevated && f.weight_pct >= 2.0;
+
+      let bgStyle, borderStyle;
+      if (isFlagged) {
+        bgStyle = 'linear-gradient(135deg, rgba(224, 92, 92, 0.95), rgba(185, 45, 45, 0.98))';
+        borderStyle = '1px solid rgba(224, 92, 92, 0.7)';
+      } else if (isElevated) {
+        bgStyle = 'linear-gradient(135deg, rgba(245, 166, 35, 0.92), rgba(210, 130, 20, 0.95))';
+        borderStyle = '1px solid rgba(245, 166, 35, 0.7)';
+      } else if (isModerate) {
+        bgStyle = 'linear-gradient(135deg, rgba(59, 130, 246, 0.88), rgba(35, 95, 220, 0.92))';
+        borderStyle = '1px solid rgba(59, 130, 246, 0.6)';
+      } else {
+        bgStyle = 'linear-gradient(135deg, rgba(108, 99, 255, 0.8), rgba(75, 68, 190, 0.85))';
+        borderStyle = '1px solid rgba(108, 99, 255, 0.5)';
+      }
+
+      // Convert to percent of container
+      const leftPct = (r.x / baseW) * 100;
+      const topPct = (r.y / baseH) * 100;
+      const widthPct = (r.w / baseW) * 100;
+      const heightPct = (r.h / baseH) * 100;
+
+      // Font scaling based on area
+      let tickerSize = '12px';
+      if (r.w >= 140 && r.h >= 100) tickerSize = '20px';
+      else if (r.w >= 90 && r.h >= 70) tickerSize = '16px';
+      else if (r.w >= 60 && r.h >= 45) tickerSize = '13px';
+      else if (r.w < 40 || r.h < 30) tickerSize = '10px';
+
+      let weightSize = '11px';
+      if (r.w >= 140 && r.h >= 100) weightSize = '16px';
+      else if (r.w >= 90 && r.h >= 70) weightSize = '13px';
+
+      const showDetails = r.w >= 85 && r.h >= 65;
+      const showName = r.w >= 130 && r.h >= 95;
+      const showPill = r.w >= 160 && r.h >= 120 && (f.indirect || 0) > 0;
+
+      const nameHtml = showName ? `<div class="treemap-tile-name">${f.security_name || ''}</div>` : '';
+      const valHtml = showDetails ? `<div class="treemap-tile-value">${fmtDollar(f.value)}</div>` : '';
+      const pillHtml = showPill ? `<div class="treemap-tile-pill">Dir: ${fmtDollar(f.direct || 0)} · Ind: ${fmtDollar(f.indirect || 0)}</div>` : '';
+      const flagIcon = isFlagged ? `<span title="Concentration Alert (>10%)" style="font-size:12px;margin-left:4px">⚠️</span>` : '';
+
+      const tooltip = `${f.ticker} — ${f.security_name || f.ticker}\nTrue Weight: ${f.weight_pct.toFixed(2)}%\nTotal Value: ${fmtDollar(f.value)}\nDirect: ${fmtDollar(f.direct || 0)}\nIndirect (Funds): ${fmtDollar(f.indirect || 0)}${isFlagged ? '\n⚠️ EXCEEDS 10% CONCENTRATION THRESHOLD' : ''}`;
+
+      return `
+        <div class="treemap-tile"
+          style="left:${leftPct}%; top:${topPct}%; width:${widthPct}%; height:${heightPct}%; background:${bgStyle}; border:${borderStyle}; padding:${r.w < 60 || r.h < 40 ? '4px' : '8px 10px'};"
+          title="${tooltip.replace(/"/g, '&quot;')}"
+          onclick="showTickerDetail('${f.ticker}')">
+          <div>
+            <div style="display:flex; justify-content:space-between; align-items:baseline">
+              <span class="treemap-tile-ticker" style="font-size:${tickerSize}">${f.ticker}</span>
+              ${flagIcon}
+            </div>
+            ${nameHtml}
+          </div>
+          <div>
+            <div class="treemap-tile-weight" style="font-size:${weightSize}">${fmtPct(f.weight_pct)}</div>
+            ${valHtml}
+            ${pillHtml}
+          </div>
+        </div>`;
+    }).join('');
+
     panel.innerHTML = `
         <div class="card">
-          <div class="card-title">Concentration Heatmap</div>
-          <div style="margin-top: 1.5rem; height: 140px; display: flex; align-items: flex-end; gap: 6px;">
-            ${risk.true_exposure.slice(0, 15).map(f => {
-              const h = Math.max(5, Math.min(100, f.weight_pct * 5)); 
-              const color = f.flagged ? 'var(--accent-red)' : 'var(--accent-purple)';
-              return `
-                <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%">
-                  <div style="width:100%; background:${color}; height:${h}%; border-radius: 2px 2px 0 0;" title="${f.ticker}: ${fmtPct(f.weight_pct)}"></div>
-                  <div style="margin-top:6px; font-size:9px; font-weight:600; color:var(--text-secondary); width:100%; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">${f.ticker}</div>
-                </div>`;
-            }).join('')}
+          <div class="treemap-header">
+            <div>
+              <div class="card-title" style="margin-bottom:0.25rem">Concentration Heatmap (True Exposure)</div>
+              <div style="font-size:12px;color:var(--text-muted)">
+                Tile size proportional to true portfolio weight · Color reflects concentration risk relative to 10% threshold · Click tile for details
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap">
+              <div class="treemap-legend">
+                <div class="treemap-legend-item">
+                  <div class="treemap-legend-dot" style="background:var(--accent-red)"></div>
+                  <span>&gt;10% Concentration Alert</span>
+                </div>
+                <div class="treemap-legend-item">
+                  <div class="treemap-legend-dot" style="background:var(--accent-amber)"></div>
+                  <span>5%–10% Elevated</span>
+                </div>
+                <div class="treemap-legend-item">
+                  <div class="treemap-legend-dot" style="background:var(--accent-blue)"></div>
+                  <span>2%–5% Moderate</span>
+                </div>
+                <div class="treemap-legend-item">
+                  <div class="treemap-legend-dot" style="background:var(--accent-purple)"></div>
+                  <span>&lt;2% Diversified</span>
+                </div>
+              </div>
+              <div class="tax-rate-selector">
+                <button class="tax-rate-pill ${_treemapLimit === 25 ? 'active' : ''}" onclick="setTreemapLimit(25)">Top 25</button>
+                <button class="tax-rate-pill ${_treemapLimit === 50 ? 'active' : ''}" onclick="setTreemapLimit(50)">Top 50</button>
+                <button class="tax-rate-pill ${_treemapLimit === 0 ? 'active' : ''}" onclick="setTreemapLimit(0)">All Exposures</button>
+              </div>
+            </div>
           </div>
-          <div style="display:flex; justify-content:space-between; margin-top:0.75rem; font-size:11px; color:var(--text-muted)">
-            <span>Highest Exposure</span>
-            <span>Top 15 Assets</span>
+
+          <div class="treemap-stage">
+            ${tilesHtml}
           </div>
         </div>
 
