@@ -2,9 +2,16 @@ import sys
 import pandas as pd
 import yfinance as yf
 from core.database import _yf_db_get, _yf_db_set
-from data.market_data import YFINANCE_SKIP_TICKERS
+from data.market_data import YFINANCE_SKIP_TICKERS, get_fund_details
 
 _valuation_cache: dict = {}
+
+def clear_valuation_cache():
+    _valuation_cache.clear()
+
+FINANCIAL_TICKERS = {
+    "BRK-B", "BRK.B", "JPM", "ALL", "PGR", "SYF", "MA", "V", "BAC", "WFC", "MS", "GS", "C", "BLK", "SCHW"
+}
 
 def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
     """
@@ -14,6 +21,10 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
     if cached:
         return cached
 
+    # Skip known financials upfront to avoid unneeded API calls
+    if ticker_symbol in FINANCIAL_TICKERS:
+        return None
+
     try:
         t = yf.Ticker(ticker_symbol.replace("-", "."))
         info = t.info
@@ -21,7 +32,7 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
             t = yf.Ticker(ticker_symbol)
             info = t.info
             if not info or not info.get("shortName"):
-                return None
+                return _yf_db_get(ticker_symbol, "valuation", allow_stale=True)
 
         # FCF-WACC model is not applicable to financials (banks, insurers):
         # their loan issuance is recorded as cash outflow, making FCF meaningless.
@@ -92,10 +103,8 @@ def _fetch_valuation_inputs(ticker_symbol: str, rf_rate: float):
         _yf_db_set(ticker_symbol, "valuation", result)
         return result
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         print(f"Error fetching inputs for {ticker_symbol}: {e}")
-        return None
+        return _yf_db_get(ticker_symbol, "valuation", allow_stale=True)
 
 def _calculate_intrinsic_value_detailed(inputs: dict, rf_rate: float, erp: float = 0.0438):
     """
@@ -174,28 +183,29 @@ def calculate_valuation_metrics(positions: list) -> list:
             results.append(_valuation_cache[ticker])
             continue
         
-        is_fund = any(p.get("ticker") == ticker and p.get("type_display") == "ETF" for p in positions)
+        is_fund = any(p.get("ticker") == ticker and p.get("type_display") in ["ETF", "Mutual Fund"] for p in positions)
         
         if is_fund:
             try:
-                t = yf.Ticker(ticker)
-                if not hasattr(t, "funds_data") or t.funds_data.top_holdings is None or t.funds_data.top_holdings.empty:
+                fund_details = get_fund_details(ticker)
+                holdings = fund_details.get("holdings", [])[:20]
+                if not holdings:
                     continue
 
-                holdings = t.funds_data.top_holdings
                 total_intrinsic_ratio = 0.0
                 total_wacc = 0.0
                 total_g = 0.0
                 weight_covered = 0.0
                 
-                for underlying_ticker, row in holdings.iterrows():
-                    weight = row.get("Holding Percent") or row.get("Weight") or 0.0
-                    if weight <= 0: continue
+                for h in holdings:
+                    underlying_ticker = h.get("ticker")
+                    weight = h.get("weight", 0.0)
+                    if weight <= 0 or not underlying_ticker: continue
                     
                     u_inputs = _fetch_valuation_inputs(str(underlying_ticker), rf_rate)
                     if u_inputs:
                         u_val = _calculate_intrinsic_value_detailed(u_inputs, rf_rate, erp)
-                        if u_val and u_inputs["current_price"] > 0:
+                        if u_val and u_inputs.get("current_price", 0) > 0:
                             ratio = u_val["intrinsic_price"] / u_inputs["current_price"]
                             total_intrinsic_ratio += ratio * weight
                             total_wacc += u_val["wacc"] * weight
@@ -208,7 +218,22 @@ def calculate_valuation_metrics(positions: list) -> list:
                 avg_wacc = total_wacc / weight_covered
                 avg_g = total_g / weight_covered
 
-                current_price = t.info.get("navPrice") or t.info.get("regularMarketPrice") or t.info.get("previousClose") or 0
+                pos_fund = next((p for p in positions if p.get("ticker") == ticker), {})
+                current_price = 0.0
+                if pos_fund.get("quantity") and pos_fund.get("value"):
+                    current_price = pos_fund["value"] / pos_fund["quantity"]
+                if current_price <= 0:
+                    cached_m = _yf_db_get(ticker, "market") or _yf_db_get(ticker, "market", allow_stale=True)
+                    if cached_m and cached_m.get("regularMarketPrice"):
+                        current_price = float(cached_m["regularMarketPrice"])
+                if current_price <= 0:
+                    try:
+                        t = yf.Ticker(ticker)
+                        current_price = t.info.get("navPrice") or t.info.get("regularMarketPrice") or t.info.get("previousClose") or 0
+                    except Exception:
+                        pass
+                if current_price <= 0: continue
+
                 intrinsic_price = current_price * avg_ratio
                 mos = (1 - (current_price / intrinsic_price)) if intrinsic_price > 0 else -1
 
@@ -239,7 +264,7 @@ def calculate_valuation_metrics(positions: list) -> list:
 
                 val_data = {
                     "ticker": ticker,
-                    "security_name": t.info.get("shortName") or ticker,
+                    "security_name": pos_fund.get("security_name") or ticker,
                     "current_price": round(float(current_price), 2),
                     "intrinsic_price": round(float(intrinsic_price), 2),
                     "mos": round(float(mos), 4),
@@ -257,7 +282,9 @@ def calculate_valuation_metrics(positions: list) -> list:
                 _valuation_cache[ticker] = val_data
                 results.append(val_data)
                 continue
-            except Exception: continue
+            except Exception as e:
+                print(f"Error calculating fund valuation for {ticker}: {e}")
+                continue
 
         inputs = _fetch_valuation_inputs(ticker, rf_rate)
         if not inputs: continue

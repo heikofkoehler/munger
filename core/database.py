@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 from typing import Optional
 
 YF_CACHE_DB = "market_data.db"
-_YF_TTL = {"market": 24, "valuation": 6}  # hours per data type
+_YF_TTL = {"market": 24, "valuation": 720}  # hours per data type (24h for market prices, 30 days for financial statements)
 
-def _yf_db_get(ticker: str, data_type: str) -> Optional[dict]:
-    """Return cached yfinance data if present and within TTL, else None."""
+def _yf_db_get(ticker: str, data_type: str, allow_stale: bool = False) -> Optional[dict]:
+    """Return cached yfinance data if present and within TTL (or if allow_stale=True), else None."""
     try:
         conn = sqlite3.connect(YF_CACHE_DB)
         conn.execute("""
@@ -27,9 +27,10 @@ def _yf_db_get(ticker: str, data_type: str) -> Optional[dict]:
         conn.close()
         if not row:
             return None
-        cutoff = datetime.utcnow() - timedelta(hours=_YF_TTL[data_type])
-        if datetime.fromisoformat(row[1]) < cutoff:
-            return None
+        if not allow_stale:
+            cutoff = datetime.utcnow() - timedelta(hours=_YF_TTL.get(data_type, 24))
+            if datetime.fromisoformat(row[1]) < cutoff:
+                return None
         return json.loads(row[0])
     except Exception:
         return None

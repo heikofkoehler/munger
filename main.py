@@ -23,7 +23,7 @@ from data.market_data import enrich_with_market_data, get_fund_details
 from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot
 from metrics.tax import calculate_tax_buckets
-from metrics.valuation import calculate_valuation_metrics
+from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO)
@@ -158,15 +158,16 @@ def efficiency():
 @app.get("/api/valuation")
 def valuation():
     logger.info("API: valuation requested")
-    if "valuation" not in _cache:
+    if not _cache.get("valuation"):
         _cache["valuation"] = calculate_valuation_metrics(_cache["summary"]["positions"])
-    logger.info(f"API: valuation returning {len(_cache['valuation'])} items")
-    return _cache["valuation"]
+    logger.info(f"API: valuation returning {len(_cache.get('valuation', []))} items")
+    return _cache.get("valuation", [])
 
 
 @app.get("/api/refresh")
 def refresh():
     download_voo_holdings()
+    clear_valuation_cache()
     _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
 
