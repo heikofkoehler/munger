@@ -57,9 +57,23 @@ def load_from_sheets(sheet_id: str):
     if not rows:
         raise ValueError("Sheet returned no data.")
 
-    headers = rows[0]
-    data = rows[1:]
+    headers = [str(h).strip() for h in rows[0]]
+    # Ensure all data rows match headers length
+    data = [row[:len(headers)] + [None] * max(0, len(headers) - len(row)) for row in rows[1:]]
     df = pd.DataFrame(data, columns=headers)
+
+    # Clean numeric columns from currency signs and comma separators
+    for col in ["value", "quantity", "cost_basis"]:
+        if col in df.columns:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace("$", "", regex=False)
+                .str.replace(",", "", regex=False)
+                .str.strip()
+            )
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
     return df
 
 def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, override_path: str = None):

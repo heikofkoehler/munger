@@ -55,8 +55,19 @@ def deduplicate(df):
     type_display from the first occurrence per ticker.
     """
     df = df.copy()
+    for col in ["quantity", "value", "cost_basis"]:
+        if col in df.columns and df[col].dtype == object:
+            df[col] = (
+                df[col]
+                .astype(str)
+                .str.replace("$", "", regex=False)
+                .str.replace(",", "", regex=False)
+                .str.strip()
+            )
     df["quantity"] = pd.to_numeric(df["quantity"], errors="coerce").fillna(0)
     df["value"] = pd.to_numeric(df["value"], errors="coerce").fillna(0)
+    if "cost_basis" in df.columns:
+        df["cost_basis"] = pd.to_numeric(df["cost_basis"], errors="coerce")
     
     # 1. Apply TICKER_OVERRIDES first (using security_id or raw name)
     # This ensures that items with empty tickers are merged correctly.

@@ -1,4 +1,5 @@
 import pytest
+import pandas as pd
 from unittest.mock import patch
 from data.sources import load, EXPECTED_COLUMNS
 
@@ -38,3 +39,40 @@ def test_load_from_csv(mock_read_csv):
     from data.sources import load_from_csv
     load_from_csv("mock_file.csv")
     mock_read_csv.assert_called_once_with("mock_file.csv")
+
+@patch("os.environ.get")
+@patch("data.sources.load_from_sheets")
+def test_load_dispatcher_sheets(mock_load_sheets, mock_env_get):
+    def mock_env(key, default=None):
+        if key == "SHEET_ID": return "mock_sheet_123"
+        return default
+    mock_env_get.side_effect = mock_env
+
+    with patch("os.path.exists", return_value=False):
+        load()
+        mock_load_sheets.assert_called_once_with("mock_sheet_123")
+
+@patch("os.path.exists", return_value=True)
+@patch("google.oauth2.credentials.Credentials.from_authorized_user_file")
+@patch("googleapiclient.discovery.build")
+def test_load_from_sheets(mock_build, mock_creds_file, mock_exists):
+    mock_creds = mock_creds_file.return_value
+    mock_creds.valid = True
+
+    mock_service = mock_build.return_value
+    mock_values = mock_service.spreadsheets.return_value.values.return_value.get.return_value.execute
+    mock_values.return_value = {
+        "values": [
+            ["ticker", "quantity", "value", "cost_basis", "security_name", "type_display", "security_id"],
+            ["AAPL", "10", "$1,500.00", "$1,200.00", "Apple Inc.", "Stock", "sec_1"],
+            ["VOO", "5", "2,500.00", "", "Vanguard S&P 500", "ETF", "sec_2"],
+        ]
+    }
+    from data.sources import load_from_sheets
+    df = load_from_sheets("mock_sheet_id")
+    assert len(df) == 2
+    assert "ticker" in df.columns
+    assert df.iloc[0]["value"] == 1500.0
+    assert df.iloc[0]["cost_basis"] == 1200.0
+    assert df.iloc[1]["value"] == 2500.0
+    assert pd.isna(df.iloc[1]["cost_basis"])
