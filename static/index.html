@@ -448,6 +448,104 @@
       margin-bottom: 1.5rem;
     }
 
+    /* ── Tax Liability & Gains Analysis ──────────────────────── */
+    .tax-analysis-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.25rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+    .tax-rate-selector {
+      display: flex;
+      align-items: center;
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 2px;
+      gap: 2px;
+    }
+    .tax-rate-pill {
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tax-rate-pill:hover {
+      color: var(--text-primary);
+    }
+    .tax-rate-pill.active {
+      background: var(--accent-purple);
+      color: #ffffff;
+    }
+    .tax-stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+    }
+    .tax-stat-title {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.4rem;
+    }
+    .tax-stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      line-height: 1.15;
+      margin-bottom: 0.25rem;
+    }
+    .tax-stat-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+    }
+    .tax-stat-divider {
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+      padding-top: 0.75rem;
+    }
+    .tax-stat-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 0.3rem;
+    }
+    .tax-stat-note {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin-top: 0.4rem;
+      line-height: 1.3;
+    }
+    .tax-pill-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .badge-sheltered {
+      background: rgba(0, 212, 170, 0.15);
+      color: var(--accent-teal);
+    }
+    .badge-info {
+      background: rgba(108, 99, 255, 0.15);
+      color: var(--accent-purple);
+    }
+
     /* ── Account links & detail ──────────────────────────────── */
     .account-link {
       cursor: pointer;
@@ -1926,9 +2024,120 @@
     return `<span style="color:${c};${style}">${gain >= 0 ? '+' : ''}${fmtDollar(gain)}</span>`;
   }
 
+  let _currentTaxRate = 0.238;
+
+  function setTaxRate(rate) {
+    _currentTaxRate = rate;
+    if (_taxData) renderAccounts(_taxData);
+  }
+
   function renderAccounts(data) {
     const buckets = data.buckets;
     const total = data.total_value;
+
+    // Gains & Tax Liability Analysis Card
+    const gs = data.gains_summary || {};
+    const taxable = gs.taxable || { value_with_basis: 0, cost_basis: 0, unrealized_gain: 0, unrealized_loss: 0, net_gain: 0, gain_pct: 0 };
+    const retirement = gs.retirement || { value_with_basis: 0, cost_basis: 0, unrealized_gain: 0, unrealized_loss: 0, net_gain: 0, gain_pct: 0 };
+    const totalInfo = gs.total_informational || { value_with_basis: 0, cost_basis: 0, unrealized_gain: 0, unrealized_loss: 0, net_gain: 0, gain_pct: 0 };
+
+    const taxLiability = taxable.net_gain > 0 ? (taxable.net_gain * _currentTaxRate) : 0;
+    const afterTaxValue = taxable.value_with_basis > 0 ? (taxable.value_with_basis - taxLiability) : 0;
+    const taxRatePctStr = (_currentTaxRate * 100).toFixed(1);
+
+    const gainsSection = `
+      <div class="card" style="margin-bottom:1.5rem">
+        <div class="tax-analysis-header">
+          <div>
+            <div class="card-title" style="margin-bottom:0.25rem">Capital Gains & Tax Liability Analysis</div>
+            <div style="font-size:12px;color:var(--text-muted)">Breakdown of taxable vs. tax-sheltered gains and modeled capital gains tax liability</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:0.6rem">
+            <span style="font-size:12px;color:var(--text-secondary);font-weight:500">Est. LTCG Rate:</span>
+            <div class="tax-rate-selector">
+              <button class="tax-rate-pill ${_currentTaxRate === 0.15 ? 'active' : ''}" onclick="setTaxRate(0.15)">15%</button>
+              <button class="tax-rate-pill ${_currentTaxRate === 0.20 ? 'active' : ''}" onclick="setTaxRate(0.20)">20%</button>
+              <button class="tax-rate-pill ${_currentTaxRate === 0.238 ? 'active' : ''}" onclick="setTaxRate(0.238)">23.8%</button>
+              <button class="tax-rate-pill ${_currentTaxRate === 0.33 ? 'active' : ''}" onclick="setTaxRate(0.33)">33% CA/NY</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-4" style="margin-bottom:0">
+          <!-- 1. Taxable Capital Gains -->
+          <div class="tax-stat-card">
+            <div class="tax-stat-title">Taxable Capital Gains</div>
+            <div class="tax-stat-value">${_gainSpan(taxable.net_gain)}</div>
+            <div class="tax-stat-sub">${taxable.gain_pct >= 0 ? '+' : ''}${fmtNum(taxable.gain_pct)}% on ${fmtDollar(taxable.cost_basis)} basis</div>
+            <div class="tax-stat-divider">
+              <div class="tax-stat-row">
+                <span>Gross Gains:</span>
+                <span style="color:var(--accent-teal);font-weight:600">+${fmtDollar(taxable.unrealized_gain)}</span>
+              </div>
+              <div class="tax-stat-row">
+                <span>Paper Losses:</span>
+                <span style="color:var(--accent-red);font-weight:600">${fmtDollar(taxable.unrealized_loss)}</span>
+              </div>
+              <div class="tax-stat-note">*Positions without basis (e.g. RSUs) excluded</div>
+            </div>
+          </div>
+
+          <!-- 2. Potential Tax Liability -->
+          <div class="tax-stat-card">
+            <div class="tax-stat-title">Est. Tax Liability (Taxable)</div>
+            <div class="tax-stat-value" style="color:var(--accent-red)">-${fmtDollar(taxLiability)}</div>
+            <div class="tax-stat-sub">At ${taxRatePctStr}% estimated rate</div>
+            <div class="tax-stat-divider">
+              <div class="tax-stat-row">
+                <span>After-Tax Value:</span>
+                <span style="font-weight:600;color:var(--text-primary)">${fmtDollar(afterTaxValue)}</span>
+              </div>
+              <div class="tax-stat-row">
+                <span>Tax Drag on Basis:</span>
+                <span>${taxable.value_with_basis > 0 ? (taxLiability / taxable.value_with_basis * 100).toFixed(1) : 0}%</span>
+              </div>
+              <div class="tax-stat-note">Applies to taxable brokerage accounts only</div>
+            </div>
+          </div>
+
+          <!-- 3. Retirement Gains -->
+          <div class="tax-stat-card">
+            <div class="tax-stat-title">Retirement Gains</div>
+            <div class="tax-stat-value">${_gainSpan(retirement.net_gain)}</div>
+            <div class="tax-stat-sub">${retirement.gain_pct >= 0 ? '+' : ''}${fmtNum(retirement.gain_pct)}% on ${fmtDollar(retirement.cost_basis)} basis</div>
+            <div class="tax-stat-divider">
+              <div class="tax-stat-row">
+                <span>Tax Treatment:</span>
+                <span class="tax-pill-badge badge-sheltered">Tax-Sheltered</span>
+              </div>
+              <div class="tax-stat-row">
+                <span>Capital Gains Tax:</span>
+                <span style="color:var(--accent-teal);font-weight:600">$0.00</span>
+              </div>
+              <div class="tax-stat-note">Taxed as ordinary income upon withdrawal</div>
+            </div>
+          </div>
+
+          <!-- 4. Total Informational -->
+          <div class="tax-stat-card">
+            <div class="tax-stat-title">Total Gains (Informational)</div>
+            <div class="tax-stat-value">${_gainSpan(totalInfo.net_gain)}</div>
+            <div class="tax-stat-sub">${totalInfo.gain_pct >= 0 ? '+' : ''}${fmtNum(totalInfo.gain_pct)}% on ${fmtDollar(totalInfo.cost_basis)} basis</div>
+            <div class="tax-stat-divider">
+              <div class="tax-stat-row">
+                <span>Total with Basis:</span>
+                <span style="font-weight:600;color:var(--text-primary)">${fmtDollar(totalInfo.value_with_basis)}</span>
+              </div>
+              <div class="tax-stat-row">
+                <span>Coverage:</span>
+                <span class="tax-pill-badge badge-info">All Accounts</span>
+              </div>
+              <div class="tax-stat-note">Combines taxable and retirement for tracking</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
 
     // Hero grid — include unrealized gain per bucket
     const heroKeys = ['Taxable', 'Tax-Deferred', 'Tax-Exempt (Roth)'];
@@ -1987,6 +2196,7 @@
     }).join('');
 
     document.getElementById('accounts-content').innerHTML = `
+      ${gainsSection}
       <div class="grid-3">${heroCards}</div>
       ${bucketCards}`;
 
@@ -2005,9 +2215,9 @@
     if (!account) return;
 
     const totalValue = account.holdings.reduce((s, h) => s + h.value, 0);
-    const totalCostBasis = account.holdings.reduce((s, h) => s + (h.cost_basis || 0), 0);
+    const totalCostBasis = account.holdings.reduce((s, h) => s + (h.cost_basis != null ? h.cost_basis : 0), 0);
     const totalGain = totalValue - totalCostBasis;
-    const hasBasis = account.holdings.some(h => h.cost_basis > 0);
+    const hasBasis = account.holdings.some(h => h.cost_basis != null);
 
     const rows = account.holdings.map(h => {
       const ticker = tickerLink(h.ticker || (h.security_name || '').slice(0, 15));
@@ -2015,8 +2225,8 @@
       const color = colorFor(type);
       const qty = h.quantity > 0 ? fmtNum(h.quantity, h.quantity % 1 === 0 ? 0 : 4) : '—';
       const price = (h.quantity > 0 && h.value > 0) ? fmtDollarFull(h.value / h.quantity) : '—';
-      const basis = h.cost_basis > 0 ? fmtDollar(h.cost_basis) : '—';
-      const gain = h.cost_basis > 0 ? h.value - h.cost_basis : null;
+      const basis = h.cost_basis != null ? fmtDollar(h.cost_basis) : '—';
+      const gain = h.cost_basis != null ? h.value - h.cost_basis : null;
       const gainColor = gain == null ? '' : gain >= 0 ? 'color:var(--accent-teal)' : 'color:var(--accent-red)';
       const gainCell = gain == null ? '—' : `<span style="${gainColor}">${gain >= 0 ? '+' : ''}${fmtDollar(gain)}</span>`;
       return `<tr>

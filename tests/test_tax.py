@@ -40,3 +40,50 @@ def test_calculate_tax_buckets():
     taxable_holdings = buckets["Taxable"]["accounts"][0]["holdings"]
     assert len(taxable_holdings) == 1
     assert taxable_holdings[0]["ticker"] == "VOO"
+
+
+def test_gains_summary():
+    data = [
+        # Taxable with gain
+        {"account_name": "Brokerage", "institution_name": "Bank A", "ticker": "VOO", "security_name": "S&P 500", "security_id": "s1", "quantity": 10, "value": 5000, "cost_basis": 4000, "type_display": "ETF"},
+        # Taxable with loss
+        {"account_name": "Brokerage", "institution_name": "Bank A", "ticker": "PGR", "security_name": "Progressive", "security_id": "s2", "quantity": 10, "value": 1800, "cost_basis": 2000, "type_display": "Stock"},
+        # Taxable with null/NaN cost basis (should be excluded from gains)
+        {"account_name": "Equity Awards", "institution_name": "Bank A", "ticker": "GOOG", "security_name": "Google", "security_id": "s3", "quantity": 50, "value": 10000, "cost_basis": None, "type_display": "Stock"},
+        # Retirement (Tax-Deferred) with gain
+        {"account_name": "Traditional IRA", "institution_name": "Bank B", "ticker": "AAPL", "security_name": "Apple", "security_id": "s4", "quantity": 5, "value": 1000, "cost_basis": 800, "type_display": "Stock"},
+        # Retirement (Tax-Exempt / Roth) with loss
+        {"account_name": "Roth IRA", "institution_name": "Bank B", "ticker": "MSFT", "security_name": "Microsoft", "security_id": "s5", "quantity": 5, "value": 900, "cost_basis": 1000, "type_display": "Stock"},
+    ]
+    df = pd.DataFrame(data)
+    result = calculate_tax_buckets(df)
+
+    assert "gains_summary" in result
+    gs = result["gains_summary"]
+
+    # Taxable
+    taxable = gs["taxable"]
+    assert taxable["value_with_basis"] == 6800.0 # 5000 + 1800 (excludes 10000)
+    assert taxable["cost_basis"] == 6000.0 # 4000 + 2000
+    assert taxable["unrealized_gain"] == 1000.0 # VOO gain
+    assert taxable["unrealized_loss"] == -200.0 # PGR loss
+    assert taxable["net_gain"] == 800.0
+    assert taxable["gain_pct"] == round(800.0 / 6000.0 * 100.0, 2)
+
+    # Retirement
+    retirement = gs["retirement"]
+    assert retirement["value_with_basis"] == 1900.0 # 1000 + 900
+    assert retirement["cost_basis"] == 1800.0 # 800 + 1000
+    assert retirement["unrealized_gain"] == 200.0 # AAPL gain
+    assert retirement["unrealized_loss"] == -100.0 # MSFT loss
+    assert retirement["net_gain"] == 100.0
+    assert retirement["gain_pct"] == round(100.0 / 1800.0 * 100.0, 2)
+
+    # Total informational
+    total_info = gs["total_informational"]
+    assert total_info["value_with_basis"] == 8700.0
+    assert total_info["cost_basis"] == 7800.0
+    assert total_info["unrealized_gain"] == 1200.0
+    assert total_info["unrealized_loss"] == -300.0
+    assert total_info["net_gain"] == 900.0
+    assert total_info["gain_pct"] == round(900.0 / 7800.0 * 100.0, 2)
