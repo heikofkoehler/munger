@@ -1,6 +1,31 @@
 import pytest
 import pandas as pd
-from metrics.tax import calculate_tax_buckets, _classify_account
+from metrics.tax import calculate_tax_buckets, _classify_account, classify_dividend_treatment
+
+def test_classify_dividend_treatment():
+    # Common stocks and equity funds -> Qualified
+    assert classify_dividend_treatment("AAPL", "Stock", "Technology") == "Qualified"
+    assert classify_dividend_treatment("GOOG", "Stock", "Communication Services") == "Qualified"
+    assert classify_dividend_treatment("VOO", "ETF", "Large Cap") == "Qualified"
+    assert classify_dividend_treatment("SCHF", "ETF", "International") == "Qualified"
+
+    # Fixed income -> Non-Qualified (regular income)
+    assert classify_dividend_treatment("VGSH", "ETF", "") == "Non-Qualified"
+    assert classify_dividend_treatment("VCSH", "Fixed Income", "") == "Non-Qualified"
+    assert classify_dividend_treatment("BND", "ETF", "") == "Non-Qualified"
+    assert classify_dividend_treatment("VBTIX", "Mutual Fund", "") == "Non-Qualified"
+    assert classify_dividend_treatment("XYZ", "Fixed Income", "") == "Non-Qualified"
+
+    # Cash / money market sweeps -> Non-Qualified
+    assert classify_dividend_treatment("SPAXX", "Cash", "") == "Non-Qualified"
+    assert classify_dividend_treatment("FCASH", "Cash", "") == "Non-Qualified"
+    assert classify_dividend_treatment("CUR:USD", "Cash", "") == "Non-Qualified"
+
+    # REITs / Real Estate -> Non-Qualified
+    assert classify_dividend_treatment("O", "Stock", "Real Estate") == "Non-Qualified"
+    assert classify_dividend_treatment("PLD", "Stock", "Real Estate") == "Non-Qualified"
+    assert classify_dividend_treatment("VNQ", "ETF", "Real Estate") == "Non-Qualified"
+    assert classify_dividend_treatment("UNKNOWN_REIT", "Stock", "Real Estate") == "Non-Qualified"
 
 def test_classify_account():
     assert _classify_account("Mock Roth IRA") == "Tax-Exempt (Roth)"
@@ -40,6 +65,15 @@ def test_calculate_tax_buckets():
     taxable_holdings = buckets["Taxable"]["accounts"][0]["holdings"]
     assert len(taxable_holdings) == 1
     assert taxable_holdings[0]["ticker"] == "VOO"
+    assert taxable_holdings[0]["dividend_treatment"] == "Qualified"
+
+    # Check VBTIX in Tax-Deferred gets Non-Qualified treatment (bond fund)
+    deferred_holdings = [
+        h for acct in buckets["Tax-Deferred"]["accounts"] for h in acct["holdings"]
+    ]
+    vbtix = next(h for h in deferred_holdings if h["ticker"] == "VBTIX")
+    assert vbtix["dividend_treatment"] == "Non-Qualified"
+    assert vbtix["type_display"] == "Fixed Income"
 
 
 def test_gains_summary():

@@ -164,6 +164,8 @@ def enrich_with_market_data(positions: list) -> list:
         else:
             market = {k: None for k in _FIELDS}
         p.update(market)
+        from metrics.tax import classify_dividend_treatment
+        p["dividend_treatment"] = classify_dividend_treatment(ticker, p.get("type_display", ""), p.get("sector", ""))
         enriched.append(p)
 
     return enriched

@@ -7,6 +7,30 @@ _TAX_RULES = [
     ("401",  "Tax-Deferred"),
 ]
 
+REIT_TICKERS = {
+    "O", "PLD", "WELL", "VNQ", "AMT", "EQIX", "PSA", "DLR", "CCI", "SPG", "VICI", "AVB", "EQR"
+}
+
+def classify_dividend_treatment(ticker: str = "", type_display: str = "", sector: str = "") -> str:
+    """
+    Classifies dividend tax treatment as 'Qualified' or 'Non-Qualified'.
+    - Fixed Income (bonds, Treasuries), Cash (money market sweeps), and REITs
+      are Non-Qualified (taxed as regular income).
+    - Operating corporate stocks and equity ETFs/mutual funds are Qualified.
+    """
+    t = (ticker or "").upper().replace(".", "-")
+    td = (type_display or "").strip()
+    sec = (sector or "").strip()
+
+    if td in ("Fixed Income", "Cash") or t in CASH_TICKERS or t in FIXED_INCOME_TICKERS:
+        return "Non-Qualified"
+    if sec in ("Real Estate", "Financial Services / BDC") or t in REIT_TICKERS:
+        return "Non-Qualified"
+    if td in ("Stock", "Equity", "Equity / ETF", "ETF", "Mutual Fund"):
+        return "Qualified"
+    
+    return "Qualified"
+
 def _classify_account(account_name: str) -> str:
     for pattern, bucket in _TAX_RULES:
         if pattern in account_name:
@@ -52,6 +76,7 @@ def calculate_tax_buckets(df_raw) -> dict:
                 "value": round(float(row["value"]), 2),
                 "cost_basis": round(float(cb), 2) if has_cost_basis and not pd.isna(cb := pd.to_numeric(row["cost_basis"], errors="coerce")) else None,
                 "type_display": type_display,
+                "dividend_treatment": classify_dividend_treatment(ticker, type_display),
             })
         
         holdings.sort(key=lambda h: h["value"], reverse=True)
