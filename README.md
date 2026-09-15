@@ -11,11 +11,12 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from M
 - **CSV fallback & portfolio switcher** — drop in local files and switch between portfolios on the fly
 - **Position deduplication** — merges the same security held across multiple accounts by `security_id`
 - **Asset class & sector normalization** — maps cash and fixed income tickers to canonical types and enriches sector weights
+- **Quantitative Diversification & Risk Analysis** — Diversification Ratio (DR), asset-weighted vs. portfolio volatility, correlation matrix, Sharpe ratio, and Marginal Contribution to Risk analysis (Risk Drivers vs. Risk Anchors)
 - **Interactive Concentration Treemap** — Squarified Treemap heatmap revealing true concentration across direct and look-through fund holdings
 - **Capital Gains & Tax Liability Modeling** — estimates taxable capital gains and federal/state tax liability across configurable tax rates
 - **Intrinsic Valuation & Sensitivity Matrix** — 2-stage FCF DCF intrinsic value and Margin of Safety for stocks and ETFs, with interactive WACC/growth sensitivity modeling
 - **Stock Detail & Look-Through Mapping** — comprehensive drilldown for any security showing direct account shares and indirect fund exposure
-- **Fee Efficiency & Wealth Gap Projections** — asset-by-asset compounding against a zero-fee benchmark over 10, 20, and 30 years
+- **Fee Efficiency & Wealth Gap Projections** — asset-by-asset compounding against a zero-fee benchmark over 5 to 30 years
 - **Market data enrichment & SQLite cache** — dividend yield/rate, EPS, P/E, sector, market cap via yfinance with resilient local SQLite caching and offline fallback
 - **Theme toggle** — clean Monarch-style UI with instant dark and light mode toggle
 - **Local-first & zero cloud** — all financial data stays on your machine; only ticker symbols leave the machine
@@ -31,23 +32,37 @@ uvicorn main:app --reload
 ### Portfolio tab
 Net worth hero, asset class allocation bar chart, sector allocation breakdown, concentration risk alerts, institutions breakdown, and interactive positions table with asset/sector filters.
 
-### Risk tab
-Finviz/Bloomberg-style **Squarified Treemap Heatmap** displaying true portfolio concentration across direct positions and look-through index fund constituents (e.g. S&P 500 funds). Color-coded by risk threshold (>10% red alerts, 5–10% amber, 2–5% blue core, <2% purple) with Top 25, Top 50, and All Exposures toggles. Clicking any tile opens that security's detail page.
+<img src="screenshots/01_portfolio_overview.png" width="100%" alt="Portfolio Overview">
 
-### Accounts tab
-Three-bucket asset allocation (Taxable / Tax-Deferred / Tax-Exempt) with portfolio weights and account breakdown. Features an integrated **Capital Gains & Tax Liability** calculator with tax rate presets (15%, 20%, 23.8% NIIT, 33% CA/NY) and an informational gain breakout for retirement accounts. Click any account name to view a full holdings breakdown with cost basis and unrealized gain/loss.
+### Risk & Diversification tab
+Modern Portfolio Theory risk metrics including **Diversification Ratio ($DR$)**, volatility reduction, weighted average pairwise correlation, and 1-year Sharpe ratio. Includes a **Marginal Risk Contribution vs. Weight** breakdown (identifying Risk Drivers, Balanced holdings, and Risk Anchors) alongside a Finviz/Bloomberg-style **Squarified Treemap Heatmap** for true direct and indirect constituent concentration.
+
+<img src="screenshots/02_risk_diversification.png" width="100%" alt="Risk & Diversification">
+
+### Efficiency tab
+Calculates portfolio Weighted Expense Ratio, annual fee drag in dollars, identifies high-fee funds, and projects granular 5 to 30-year wealth gaps using asset-by-asset compounding against a zero-fee benchmark.
+
+<img src="screenshots/03_efficiency_wealth_gap.png" width="100%" alt="Efficiency & Wealth Gap">
 
 ### Valuation tab
 Buffett-style 2-stage FCF DCF Intrinsic Valuation table calculating Free Cash Flow, Debt-to-Equity, ROE, WACC, and Margin of Safety (MOS). Aggregates underlying look-through valuations for ETFs. Click any intrinsic price to launch an interactive 5×5 sensitivity matrix across varying discount and growth rates.
 
-### Efficiency tab
-Calculates portfolio Weighted Expense Ratio, annual fee drag in dollars, identifies high-fee funds, and projects 10/20/30-year wealth gaps using asset-by-asset compounding against a zero-fee benchmark.
+<img src="screenshots/04_valuation_dcf.png" width="100%" alt="Valuation & DCF">
 
 ### Dividends tab
 Projected annual dividend income hero, yield, and cashflow split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Annual $/Share · Yield · Projected Income with sortable columns.
 
+<img src="screenshots/05_dividends_income.png" width="100%" alt="Dividends & Income">
+
 ### Earnings tab
 Weighted-average trailing P/E hero, split by tax bucket. Per-bucket tables show Ticker · Name · Value · Type · Sector · Trailing EPS · Trailing P/E · Forward P/E · Market Cap with sortable columns.
+
+<img src="screenshots/06_earnings_pe.png" width="100%" alt="Earnings & Look-Through PE">
+
+### Accounts tab
+Three-bucket asset allocation (Taxable / Tax-Deferred / Tax-Exempt) with portfolio weights and account breakdown. Features an integrated **Capital Gains & Tax Liability** calculator with tax rate presets (15%, 20%, 23.8% NIIT, 33% CA/NY) and an informational gain breakout for retirement accounts. Click any account name to view a full holdings breakdown with cost basis and unrealized gain/loss.
+
+<img src="screenshots/07_accounts_tax_buckets.png" width="100%" alt="Accounts & Tax Buckets">
 
 ### Ticker Detail View
 Clicking any ticker link or heatmap tile navigates to a dedicated stock overview displaying Market Cap, Trailing P/E, Dividend Yield, and Expense Ratio / Ex-Div Date. Displays all accounts holding the security directly (with cost basis and gain/loss) as well as look-through indirect exposure through portfolio funds with implied dollar values.
