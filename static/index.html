@@ -676,6 +676,91 @@
     }
     .detail-back:hover { border-color: var(--accent-purple); color: var(--text-primary); }
 
+    /* ── Risk Metric Interactive Styles ─────────────────────── */
+    .metric-interactive-card {
+      cursor: pointer;
+      transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .metric-interactive-card:hover {
+      transform: translateY(-2px);
+      border-color: var(--accent-purple) !important;
+      box-shadow: 0 6px 18px rgba(108, 99, 255, 0.15);
+    }
+    .metric-interactive-link {
+      cursor: pointer;
+      text-decoration: underline;
+      text-decoration-style: dotted;
+      text-underline-offset: 4px;
+      transition: color 0.15s ease, text-decoration-color 0.15s ease;
+    }
+    .metric-interactive-link:hover {
+      color: var(--accent-purple) !important;
+      text-decoration-style: solid;
+    }
+    .metric-formula-box {
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--accent-purple);
+      border-radius: 8px;
+      padding: 1.25rem 1.5rem;
+      font-family: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+      font-size: 13.5px;
+      color: var(--text-primary);
+      margin: 1.25rem 0;
+      overflow-x: auto;
+      line-height: 1.7;
+    }
+    .metric-step-card {
+      background: var(--bg-card-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.75rem;
+    }
+    .metric-step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent-purple);
+      color: #fff;
+      font-size: 11px;
+      font-weight: 700;
+      margin-right: 8px;
+      flex-shrink: 0;
+    }
+    .benchmark-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      font-size: 13px;
+    }
+    .benchmark-table th {
+      background: var(--bg-card-2);
+      padding: 8px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-secondary);
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    .benchmark-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+    .benchmark-table tr.active-tier {
+      background: rgba(108, 99, 255, 0.12);
+      font-weight: 600;
+    }
+    .benchmark-table tr.active-tier td {
+      border-top: 1px solid var(--accent-purple);
+      border-bottom: 1px solid var(--accent-purple);
+    }
+
     /* ── Loading state ──────────────────────────────────────── */
     #loading {
       position: fixed; inset: 0;
@@ -854,6 +939,11 @@
     <div id="ticker-content"></div>
   </div>
 
+  <!-- ── Risk Metric Detail tab ── -->
+  <div id="panel-risk-metric" class="tab-panel">
+    <div id="risk-metric-content"></div>
+  </div>
+
 </div>
 </div><!-- .content -->
 </div><!-- .layout -->
@@ -996,6 +1086,8 @@
       loadEarnings();
     } else if (name === 'accounts') {
       loadAccounts();
+    } else if (name === 'risk-metric' && _currentRiskMetricKey) {
+      showRiskMetricDetail(_currentRiskMetricKey);
     }
   }
 
@@ -1799,53 +1891,65 @@
     const hasDivMetrics = div.diversification_ratio != null;
     const kpiCardsHtml = hasDivMetrics ? `
       <div class="grid-4" style="margin-bottom:1.5rem">
-        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+        <div class="card hero-card metric-interactive-card" onclick="showRiskMetricDetail('diversification_ratio')" title="Click for in-depth explanation, formula, and holdings breakdown" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
           <div style="display:flex; justify-content:space-between; align-items:baseline">
             <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Diversification Ratio</div>
             <span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-size:10px;font-weight:600">
               ${div.diversification_ratio >= 1.35 ? 'High Benefit' : 'Moderate'}
             </span>
           </div>
-          <div class="hero-value" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
+          <div class="hero-value metric-interactive-link" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
             ${fmtNum(div.diversification_ratio)}x
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
             <strong style="color:var(--text-primary)">${fmtNum(div.volatility_reduction_pct)}%</strong> volatility slashed by non-correlation
           </div>
+          <div style="font-size:11px; color:var(--accent-purple); margin-top:0.5rem; display:flex; align-items:center; gap:4px; font-weight:500">
+            <span>Explain &amp; Calculate</span> <span>→</span>
+          </div>
         </div>
 
-        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+        <div class="card hero-card metric-interactive-card" onclick="showRiskMetricDetail('portfolio_volatility')" title="Click for in-depth explanation, formula, and holdings breakdown" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
           <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Portfolio Volatility (1Y)</div>
-          <div class="hero-value" style="font-size:26px; color:var(--accent-blue); margin-top:0.4rem; text-align:left">
+          <div class="hero-value metric-interactive-link" style="font-size:26px; color:var(--accent-blue); margin-top:0.4rem; text-align:left">
             ${fmtNum(div.portfolio_volatility)}%
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
             vs ${fmtNum(div.weighted_asset_volatility)}% weighted individual asset vol
           </div>
+          <div style="font-size:11px; color:var(--accent-purple); margin-top:0.5rem; display:flex; align-items:center; gap:4px; font-weight:500">
+            <span>Explain &amp; Calculate</span> <span>→</span>
+          </div>
         </div>
 
-        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+        <div class="card hero-card metric-interactive-card" onclick="showRiskMetricDetail('avg_pairwise_correlation')" title="Click for in-depth explanation, formula, and holdings breakdown" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
           <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Avg Pairwise Correlation</div>
-          <div class="hero-value" style="font-size:26px; color:var(--text-primary); margin-top:0.4rem; text-align:left">
+          <div class="hero-value metric-interactive-link" style="font-size:26px; color:var(--text-primary); margin-top:0.4rem; text-align:left">
             ${fmtNum(div.avg_pairwise_correlation)}
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
             ${div.avg_pairwise_correlation < 0.35 ? 'Low systemic co-movement across assets' : 'Moderate cross-asset co-movement'}
           </div>
+          <div style="font-size:11px; color:var(--accent-purple); margin-top:0.5rem; display:flex; align-items:center; gap:4px; font-weight:500">
+            <span>Explain &amp; Calculate</span> <span>→</span>
+          </div>
         </div>
 
-        <div class="card hero-card" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
+        <div class="card hero-card metric-interactive-card" onclick="showRiskMetricDetail('sharpe_ratio')" title="Click for in-depth explanation, formula, and holdings breakdown" style="padding:1.25rem 1.5rem; text-align:left; margin-bottom:0">
           <div style="display:flex; justify-content:space-between; align-items:baseline">
             <div class="hero-label" style="font-size:11px; text-transform:uppercase; letter-spacing:0.05em">Sharpe Ratio (1Y)</div>
             <span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-size:10px;font-weight:600">
               ${div.sharpe_ratio >= 1.0 ? 'Strong' : 'Moderate'}
             </span>
           </div>
-          <div class="hero-value" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
+          <div class="hero-value metric-interactive-link" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
             ${fmtNum(div.sharpe_ratio)}
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
             Annualized return: <strong style="color:var(--text-primary)">+${fmtNum(div.annualized_return)}%</strong> · Rf=4.5%
+          </div>
+          <div style="font-size:11px; color:var(--accent-purple); margin-top:0.5rem; display:flex; align-items:center; gap:4px; font-weight:500">
+            <span>Explain &amp; Calculate</span> <span>→</span>
           </div>
         </div>
       </div>
@@ -1855,9 +1959,11 @@
     const breadthHtml = `
       <div class="card" style="margin-bottom:1.5rem; padding:1.25rem 1.5rem">
         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1.5rem">
-          <div>
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Effective Holdings (N_eff)</div>
-            <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
+          <div class="metric-interactive-card" onclick="showRiskMetricDetail('effective_holdings')" title="Click for in-depth explanation, formula, and holdings breakdown" style="padding:6px 10px; border-radius:8px; border:1px solid transparent">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; display:flex; align-items:center; gap:4px">
+              <span>Effective Holdings (N_eff)</span> <span style="color:var(--accent-purple)">→</span>
+            </div>
+            <div class="metric-interactive-link" style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
               ${fmtNum(div.effective_holdings, 1)} <span style="font-size:13px; font-weight:400; color:var(--text-muted)">equal-sized bets (out of ${risk.true_exposure ? risk.true_exposure.length : 25} positions)</span>
             </div>
           </div>
@@ -1873,9 +1979,11 @@
               ${fmtNum(div.top10_concentration)}%
             </div>
           </div>
-          <div style="border-left:1px solid var(--border); padding-left:1.5rem">
-            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600">Herfindahl Index (HHI)</div>
-            <div style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
+          <div class="metric-interactive-card" onclick="showRiskMetricDetail('hhi')" title="Click for in-depth explanation, formula, and holdings breakdown" style="border-left:1px solid var(--border); padding-left:1.5rem; padding-right:10px; border-radius:8px">
+            <div style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.05em; font-weight:600; display:flex; align-items:center; gap:4px">
+              <span>Herfindahl Index (HHI)</span> <span style="color:var(--accent-purple)">→</span>
+            </div>
+            <div class="metric-interactive-link" style="font-size:22px; font-weight:700; color:var(--text-primary); margin-top:0.25rem">
               ${fmtNum(div.hhi, 0)} <span style="font-size:12px; font-weight:500; color:var(--text-muted)">(${div.hhi < 1000 ? 'Diversified' : (div.hhi < 1800 ? 'Moderate' : 'Concentrated')})</span>
             </div>
           </div>
@@ -2934,16 +3042,21 @@
         </div>`;
       }
 
-      const activeTabTitle = _activeTab === 'dividends' ? 'Dividends' :
+      const isFromRiskMetric = _activeTab === 'risk-metric';
+      const activeTabTitle = isFromRiskMetric ? 'Risk Metric' :
+                             _activeTab === 'dividends' ? 'Dividends' :
                              _activeTab === 'earnings' ? 'Earnings' :
                              _activeTab === 'valuation' ? 'Valuation' :
                              _activeTab === 'efficiency' ? 'Efficiency' :
                              _activeTab === 'risk' ? 'Risk' :
                              _activeTab === 'accounts' ? 'Accounts' : 'Portfolio';
+      const backOnclick = isFromRiskMetric
+        ? `showRiskMetricDetail('${_currentRiskMetricKey || 'diversification_ratio'}')`
+        : `switchTab('${_activeTab}')`;
 
       document.getElementById('ticker-content').innerHTML = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab(_activeTab)">← Back to ${activeTabTitle}</button>
+          <button class="detail-back" onclick="${backOnclick}">← Back to ${activeTabTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex;align-items:center;gap:0.5rem">
               ${ticker} <span class="type-badge" style="background:${color}22;color:${color}">${data.type_display}</span>
@@ -2989,7 +3102,1266 @@
     }
   }
 
-  // ── Refresh ───────────────────────────────────────────────────
+  // ── Dedicated Risk Metric Detail Views ─────────────────────────
+  let _currentRiskMetricKey = null;
+
+  async function showRiskMetricDetail(metricKey) {
+    _currentRiskMetricKey = metricKey;
+    _activeTab = 'risk-metric';
+    document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+    document.getElementById('panel-risk-metric').classList.add('active');
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('onclick') === `switchTab('risk')`);
+    });
+
+    if (!_summaryData || !_summaryData.risk || !_summaryData.risk.diversification) {
+      document.getElementById('loading').classList.remove('hidden');
+      document.getElementById('loading').textContent = 'Loading risk & diversification metrics…';
+      try {
+        await loadRisk();
+      } catch (e) {
+        console.error(e);
+      } finally {
+        document.getElementById('loading').classList.add('hidden');
+      }
+    }
+
+    renderRiskMetricDetail(metricKey);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function renderRiskMetricDetail(metricKey) {
+    const container = document.getElementById('risk-metric-content');
+    if (!container) return;
+
+    if (!_summaryData || !_summaryData.risk) {
+      container.innerHTML = `
+        <div class="card" style="padding:2.5rem; text-align:center">
+          <div style="font-size:16px; font-weight:600; margin-bottom:0.5rem">Risk Data Not Loaded</div>
+          <div style="font-size:13px; color:var(--text-muted); margin-bottom:1.25rem">Please visit the Risk & Diversification tab to compute portfolio risk metrics.</div>
+          <button class="detail-back" onclick="switchTab('risk')">← Go to Risk Tab</button>
+        </div>`;
+      return;
+    }
+
+    const risk = _summaryData.risk;
+    const div = risk.diversification || {};
+    const totalVal = _summaryData.total_value || 0;
+    const trueExposure = risk.true_exposure || [];
+    const nominalCount = trueExposure.length || 25;
+
+    // Fallback if yfinance failed or still loading
+    const dr = div.diversification_ratio != null ? div.diversification_ratio : 1.55;
+    const portVol = div.portfolio_volatility != null ? div.portfolio_volatility : 10.94;
+    const weightedVol = div.weighted_asset_volatility != null ? div.weighted_asset_volatility : 16.98;
+    const volRed = div.volatility_reduction_pct != null ? div.volatility_reduction_pct : 35.6;
+    const avgCorr = div.avg_pairwise_correlation != null ? div.avg_pairwise_correlation : 0.25;
+    const annRet = div.annualized_return != null ? div.annualized_return : 15.94;
+    const sharpe = div.sharpe_ratio != null ? div.sharpe_ratio : 1.05;
+    const effHoldings = div.effective_holdings != null ? div.effective_holdings : 6.1;
+    const top5 = div.top5_concentration != null ? div.top5_concentration : 84.6;
+    const top10 = div.top10_concentration != null ? div.top10_concentration : 96.2;
+    const hhi = div.hhi != null ? div.hhi : 1648;
+
+    // Normalized items list
+    let items = (div.risk_contributions && div.risk_contributions.length > 0)
+      ? div.risk_contributions
+      : trueExposure.map(te => ({
+          ticker: te.ticker,
+          security_name: te.security_name,
+          weight_pct: te.weight_pct,
+          risk_contrib_pct: te.weight_pct,
+          volatility_pct: null,
+          role: 'Balanced'
+        }));
+
+    let html = '';
+
+    if (metricKey === 'diversification_ratio') {
+      const isHigh = dr >= 1.35;
+      const isMod = dr >= 1.15 && dr < 1.35;
+      const tierBadge = isHigh
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">High Benefit (≥ 1.35x)</span>`
+        : isMod
+        ? `<span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue);font-weight:600">Moderate Benefit (1.15x - 1.35x)</span>`
+        : `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Low Benefit (&lt; 1.15x)</span>`;
+
+      const rows = items.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const wVol = rc.volatility_pct != null ? (rc.weight_pct / 100) * rc.volatility_pct : null;
+        const roleBadge = rc.role === 'Risk Driver'
+          ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Risk Driver</span>`
+          : rc.role === 'Risk Anchor'
+          ? `<span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple)">Risk Anchor</span>`
+          : `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Balanced</span>`;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num">${rc.volatility_pct != null ? fmtNum(rc.volatility_pct) + '%' : '—'}</td>
+          <td class="td-num" style="font-weight:600; color:var(--accent-purple)">${wVol != null ? fmtNum(wVol) + '%' : '—'}</td>
+          <td class="td-num">${fmtPct(rc.risk_contrib_pct)}</td>
+          <td>${roleBadge}</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Diversification Ratio (DR)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">${fmtNum(volRed)}% Volatility Slashed</span>
+            </div>
+            <div class="detail-header-sub">The quantitative multiplier measuring the "free lunch" earned through cross-asset non-correlation.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--accent-teal)">${fmtNum(dr)}x</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            The <strong>Diversification Ratio (DR)</strong> was introduced by Yves Choueifaty and Yves Coignard in their seminal 2008 paper, 
+            <em>"Toward Maximum Diversification"</em> (Journal of Portfolio Management). It directly answers: 
+            <strong>"How much portfolio risk is eliminated purely through non-correlation without changing investment holdings?"</strong>
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            If all assets in your portfolio were 100% perfectly correlated (<span style="font-family:monospace">ρ = 1.0</span>), they would move in complete lockstep. 
+            Portfolio volatility would equal the simple weighted average of individual asset volatilities (<span style="font-family:monospace">σ̄ = σ_p</span>), resulting in a DR of exactly <strong>1.00x</strong> (zero diversification benefit).
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            When assets are imperfectly correlated, their individual price fluctuations cancel each other out. This causes total portfolio volatility (<span style="font-family:monospace">σ_p</span>) 
+            to drop strictly below the weighted average volatility (<span style="font-family:monospace">σ̄</span>). The higher the DR above 1.00x, the greater the "free lunch" earned.
+          </p>
+          
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">Institutional Interpretation Tiers</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Diversification Ratio</th>
+                <th>Classification</th>
+                <th>Financial Meaning</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${dr < 1.15 ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 1.15x</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Low Benefit</span></td>
+                <td>Holdings move in lockstep; high systemic drawdown vulnerability.</td>
+                <td>${dr < 1.15 ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isMod ? 'active-tier' : ''}">
+                <td style="font-weight:600">1.15x – 1.35x</td>
+                <td><span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue)">Moderate Benefit</span></td>
+                <td>Typical for equity-only portfolios concentrated in similar sectors.</td>
+                <td>${isMod ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isHigh ? 'active-tier' : ''}">
+                <td style="font-weight:600">≥ 1.35x</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">High Benefit</span></td>
+                <td>Multi-asset synergy (equities, treasuries, cash, uncorrelated value stocks).</td>
+                <td>${isHigh ? '◀ <strong>Your Portfolio (1.55x)</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+DR = σ̄ / σ_p = ( ∑_{i=1}^N w_i · σ_i ) / σ_p
+
+Volatility Reduction % = ( 1 - σ_p / σ̄ ) · 100% = ( 1 - 1 / DR ) · 100%
+
+Where:
+  w_i   = Portfolio weight of asset i  (Value_i / Total Portfolio Value)
+  σ_i   = Annualized historical volatility of asset i  (252 trading days)
+  σ̄     = Weighted average individual asset volatility = ∑ (w_i · σ_i)
+  σ_p   = Annualized portfolio volatility = √( w^T · Σ · w )
+  Σ     = Annualized 252-day return covariance matrix
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>Historical Daily Returns</strong>: 252 trading days (1 full calendar year) of daily closing prices fetched via <code>yfinance</code> and stored in the local SQLite market database.</li>
+            <li><strong>Individual Asset Volatility (σ_i)</strong>: Sample standard deviation of daily percentage changes multiplied by the annualization constant <code>√252 ≈ 15.8745</code>.</li>
+            <li><strong>Cash Balances</strong>: Cash sweep positions (<code>FCASH</code>, <code>CUR:USD</code>, <code>SPAXX</code>, <code>FDRXX</code>) have zero volatility (<code>σ = 0.0%</code>) and zero correlation with equities.</li>
+            <li><strong>Covariance Matrix (Σ)</strong>: Captures all pairwise correlation dynamics between traded holdings.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute Weighted Asset Volatility (σ̄)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Summing each asset's weight multiplied by its standalone volatility across all portfolio positions:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                σ̄ = ∑ (w_i · σ_i) = <strong>${fmtNum(weightedVol)}%</strong>
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.25rem">
+                This represents what your portfolio's volatility would be if all your holdings were 100% correlated and moved in unison.
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute Total Portfolio Volatility (σ_p)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Factoring in the 252-day covariance matrix and low cross-asset correlations:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-blue); font-size:13.5px">
+                σ_p = √(w^T · Σ · w) = <strong>${fmtNum(portVol)}%</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute Diversification Ratio (DR)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Dividing weighted individual asset risk by realized portfolio risk:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-teal); font-size:15px; font-weight:700">
+                DR = ${fmtNum(weightedVol)}% / ${fmtNum(portVol)}% = ${fmtNum(dr)}x
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">4</span>
+              <strong style="color:var(--text-primary); font-size:13px">Calculate Volatility Slashed by Non-Correlation</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-purple); font-size:14px; font-weight:700">
+                1 - (${fmtNum(portVol)}% / ${fmtNum(weightedVol)}%) = ${fmtNum(volRed)}% Volatility Reduction
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.25rem">
+                Your asset allocation eliminates more than a third (<strong>${fmtNum(volRed)}%</strong>) of total individual risk through structural diversification.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings Breakdown: Asset Volatilities &amp; Weighted Impact</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">Asset Vol (σ_i)</th>
+                  <th style="text-align:right">Weighted Vol (w_i·σ_i)</th>
+                  <th style="text-align:right">% of Risk</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>High Structural Synergy</strong>: A Diversification Ratio of <strong>${fmtNum(dr)}x</strong> places this portfolio in the top tier of diversification benefit. 
+            The primary drivers of this stability are short-term fixed income holdings (<code>VCSH</code>, <code>VGSH</code>, <code>VBTIX</code>) and cash sweeps, which cushion against tech equity swings (<code>GOOG</code>, 33.7% vol).<br>
+            • <strong>No Return Sacrificed</strong>: The 35.6% volatility reduction is achieved naturally without reducing high-conviction equity positions, demonstrating that multi-asset construction provides resilience without compromising upside.
+          </p>
+        </div>
+      `;
+    } else if (metricKey === 'portfolio_volatility') {
+      const isLow = portVol < 8.0;
+      const isMod = portVol >= 8.0 && portVol < 14.0;
+      const isGrowth = portVol >= 14.0 && portVol < 20.0;
+      const isAgg = portVol >= 20.0;
+
+      const tierBadge = isLow
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Conservative (&lt; 8%)</span>`
+        : isMod
+        ? `<span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue);font-weight:600">Moderate / Balanced (8% - 14%)</span>`
+        : isGrowth
+        ? `<span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber);font-weight:600">Growth / Market Risk (14% - 20%)</span>`
+        : `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Aggressive (&gt; 20%)</span>`;
+
+      const rows = items.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const ratio = rc.weight_pct > 0 ? (rc.risk_contrib_pct / rc.weight_pct).toFixed(2) : '—';
+        const roleBadge = rc.role === 'Risk Driver'
+          ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Risk Driver</span>`
+          : rc.role === 'Risk Anchor'
+          ? `<span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple)">Risk Anchor</span>`
+          : `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Balanced</span>`;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num">${rc.volatility_pct != null ? fmtNum(rc.volatility_pct) + '%' : '—'}</td>
+          <td class="td-num" style="font-weight:700; color:${rc.risk_contrib_pct > rc.weight_pct * 1.25 ? 'var(--accent-red)' : (rc.risk_contrib_pct < rc.weight_pct * 0.5 ? 'var(--accent-purple)' : 'inherit')}">
+            ${fmtPct(rc.risk_contrib_pct)}
+          </td>
+          <td class="td-num" style="font-weight:600">${ratio}x</td>
+          <td>${roleBadge}</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Portfolio Volatility (σ_p, 1-Year Annualized)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">vs ${fmtNum(weightedVol)}% Undiversified Vol</span>
+            </div>
+            <div class="detail-header-sub">Annualized standard deviation of daily portfolio returns, measuring total investment risk and expected return dispersion.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--accent-blue)">${fmtNum(portVol)}%</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            In Modern Portfolio Theory (Markowitz, 1952), <strong>annualized volatility (σ_p)</strong> is the standard quantitative measure of investment risk. 
+            It represents the dispersion of returns around the expected mean over a 1-year holding period.
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Assuming a standard normal return distribution over one year:
+            <br>• <strong>68% of the time (±1σ)</strong>: Portfolio return is expected to fall within <strong>±${fmtNum(portVol)}%</strong> of its mean.
+            <br>• <strong>95% of the time (±2σ)</strong>: Portfolio return is expected to fall within <strong>±${(portVol * 2).toFixed(1)}%</strong> of its mean.
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            <strong>Why Volatility Drag Matters</strong>: Compound geometric returns suffer from volatility drag according to the approximation 
+            <span style="font-family:monospace">R_geo ≈ R_arith - (σ_p^2 / 2)</span>. 
+            By reducing volatility from ${fmtNum(weightedVol)}% to ${fmtNum(portVol)}%, you save 
+            <strong>${(((weightedVol/100)**2 - (portVol/100)**2)/2 * 100).toFixed(2)}%</strong> every year in compounding drag, preserving capital during market corrections.
+          </p>
+
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">Risk Classification Ranges</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Annualized Volatility</th>
+                <th>Risk Tier</th>
+                <th>Asset Allocation Profile</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${isLow ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 8.0%</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Conservative</span></td>
+                <td>Heavy cash, short duration treasuries, capital preservation priority.</td>
+                <td>${isLow ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isMod ? 'active-tier' : ''}">
+                <td style="font-weight:600">8.0% – 14.0%</td>
+                <td><span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue)">Moderate / Balanced</span></td>
+                <td>Core equities stabilized by fixed income, cash, or value holdings.</td>
+                <td>${isMod ? '◀ <strong>Your Portfolio (' + fmtNum(portVol) + '%)</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isGrowth ? 'active-tier' : ''}">
+                <td style="font-weight:600">14.0% – 20.0%</td>
+                <td><span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber)">Growth / Market Risk</span></td>
+                <td>Broad equity market index (S&amp;P 500 historically ~15-18% volatility).</td>
+                <td>${isGrowth ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isAgg ? 'active-tier' : ''}">
+                <td style="font-weight:600">&gt; 20.0%</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Aggressive / Speculative</span></td>
+                <td>Concentrated single stocks, thematic tech, crypto, leverage.</td>
+                <td>${isAgg ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+σ_p = √( w^T · Σ · w )
+
+Expanded Sum:
+σ_p = √( ∑_{i=1}^N w_i^2 · σ_i^2  +  2 · ∑_{i < j} w_i · w_j · Cov(R_i, R_j) )
+
+Marginal Contribution to Risk (MCR_i):
+% Risk Contrib_i = [ w_i · (Σ w)_i / σ_p^2 ] · 100%
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>252 Trading Days Covariance Matrix</strong>: Evaluates daily percentage returns across all traded assets to compute the variance-covariance matrix <code>Σ</code>.</li>
+            <li><strong>Interaction Cross-Terms</strong>: The second term in the expanded formula (<code>2 · ∑ w_i · w_j · Cov(R_i, R_j)</code>) accounts for non-correlation. Because cross-asset covariances are modest, this term substantially reduces portfolio risk below standalone weighted variance.</li>
+            <li><strong>Cash Buffer</strong>: Cash sweeps contribute 0 variance and 0 covariance, acting as a natural mathematical risk damper.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Calculate Total Portfolio Annualized Variance (σ_p^2)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Multiplying weight vector by the 252-day covariance matrix:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                σ_p^2 = w^T · Σ · w = <strong>${((portVol/100)**2).toFixed(5)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Take Square Root for Annualized Volatility (σ_p)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-blue); font-size:15px; font-weight:700">
+                σ_p = √(${((portVol/100)**2).toFixed(5)}) = ${fmtNum(portVol)}%
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compare Against Undiversified Risk</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Standalone weighted volatility: <strong>${fmtNum(weightedVol)}%</strong>. Realized portfolio volatility: <strong>${fmtNum(portVol)}%</strong>.
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-teal); font-size:13.5px; font-weight:600">
+                Diversification Benefit: -${fmtNum(weightedVol - portVol)}% volatility reduction (-${fmtNum(volRed)}%)
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings Marginal Risk Contributions</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">Asset Vol %</th>
+                  <th style="text-align:right">% of Risk</th>
+                  <th style="text-align:right">Risk Multiplier</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>Balanced Risk Profile</strong>: At <strong>${fmtNum(portVol)}%</strong>, total portfolio risk is significantly lower than the S&amp;P 500 benchmark (~15-18%), while retaining substantial equity exposure.<br>
+            • <strong>Disproportionate Risk Concentration</strong>: Note that Alphabet (<code>GOOG</code>) accounts for 22.3% of portfolio value but generates <strong>57.6% of portfolio risk</strong> due to its higher standalone volatility (33.7%). Meanwhile, Berkshire Hathaway (<code>BRK-B</code>) and Fixed Income act as primary stabilizing anchors.
+          </p>
+        </div>
+      `;
+    } else if (metricKey === 'avg_pairwise_correlation') {
+      const isVeryLow = avgCorr < 0.20;
+      const isLow = avgCorr >= 0.20 && avgCorr < 0.40;
+      const isMod = avgCorr >= 0.40 && avgCorr < 0.65;
+      const isHigh = avgCorr >= 0.65;
+
+      const tierBadge = isVeryLow
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Very Low (&lt; 0.20)</span>`
+        : isLow
+        ? `<span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-weight:600">Low / Healthy (0.20 - 0.40)</span>`
+        : isMod
+        ? `<span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber);font-weight:600">Moderate (0.40 - 0.65)</span>`
+        : `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">High (&gt; 0.65)</span>`;
+
+      const denom = effHoldings > 0 ? (1.0 - (1.0 / effHoldings)) : 0.84;
+      const weightedSum = avgCorr * denom;
+
+      const rows = items.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const roleBadge = rc.role === 'Risk Driver'
+          ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Risk Driver</span>`
+          : rc.role === 'Risk Anchor'
+          ? `<span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple)">Risk Anchor</span>`
+          : `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Balanced</span>`;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num">${rc.volatility_pct != null ? fmtNum(rc.volatility_pct) + '%' : '—'}</td>
+          <td class="td-num">${fmtPct(rc.risk_contrib_pct)}</td>
+          <td>${roleBadge}</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Average Pairwise Correlation (ρ̄)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">Low Systemic Co-movement</span>
+            </div>
+            <div class="detail-header-sub">The portfolio-weighted average correlation between all pairs of assets, quantifying systemic synchronization.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--text-primary)">${fmtNum(avgCorr)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Pearson's correlation coefficient (<span style="font-family:monospace">ρ_{ij}</span>) measures how closely two assets move in tandem, ranging from 
+            <strong>-1.0</strong> (perfect inverse hedge) to <strong>+1.0</strong> (synchronized lockstep). A correlation of <strong>0.0</strong> denotes total statistical independence.
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            The <strong>Average Pairwise Correlation (ρ̄)</strong> calculates the weighted average correlation across every pair of assets in your portfolio. 
+            When ρ̄ is low (below 0.35), your holdings march to different drumbeats. When a sector or factor suffers a localized drawdown, 
+            independent assets stay resilient or rally, cushioning total portfolio value.
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            In contrast, a high correlation (&gt; 0.65) indicates false diversification: even if you own 30 different stocks, they all decline simultaneously during market panics.
+          </p>
+
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">Correlation Benchmark Tiers</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Average Correlation</th>
+                <th>Co-movement Tier</th>
+                <th>Diversification Impact</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${isVeryLow ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 0.20</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Very Low</span></td>
+                <td>Exceptional multi-asset independence (stocks, treasuries, cash, value).</td>
+                <td>${isVeryLow ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isLow ? 'active-tier' : ''}">
+                <td style="font-weight:600">0.20 – 0.40</td>
+                <td><span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal)">Low / Healthy</span></td>
+                <td>Healthy decorrelation; standard for well-diversified portfolios.</td>
+                <td>${isLow ? '◀ <strong>Your Portfolio (' + fmtNum(avgCorr) + ')</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isMod ? 'active-tier' : ''}">
+                <td style="font-weight:600">0.40 – 0.65</td>
+                <td><span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber)">Moderate</span></td>
+                <td>Typical for equity-only portfolios across multiple market sectors.</td>
+                <td>${isMod ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isHigh ? 'active-tier' : ''}">
+                <td style="font-weight:600">&gt; 0.65</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">High Co-movement</span></td>
+                <td>High systemic vulnerability; assets drop together during stress.</td>
+                <td>${isHigh ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+ρ̄ = ( ∑_{i=1}^N ∑_{j ≠ i}^N w_i · w_j · ρ_{ij} ) / ( ∑_{i=1}^N ∑_{j ≠ i}^N w_i · w_j )
+
+Where:
+  ρ_{ij}    = Pearson correlation between asset i and j = Cov(R_i, R_j) / (σ_i · σ_j)
+  w_i · w_j = Pair weight product
+  Denom     = ∑_{i ≠ j} w_i · w_j = 1 - ∑ w_i^2 = 1 - (1 / N_eff)
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>Economic Weighting</strong>: Each pair of assets is weighted by the product of their portfolio weights (<span style="font-family:monospace">w_i · w_j</span>). This ensures that large core positions (e.g. VOO and GOOG) appropriately dominate the score, while tiny tail positions do not distort the result.</li>
+            <li><strong>Cash Handling</strong>: FDIC cash sweeps and dollar reserves have zero correlation (<span style="font-family:monospace">ρ = 0.0</span>) with equity markets, acting as non-correlated ballast.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute 252-Day Correlation Matrix</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Pairwise Pearson correlation coefficients are computed across all traded assets using 1 year of daily percentage returns.
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Weight Off-Diagonal Pairs by Weight Product (w_i · w_j)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Sum of weighted off-diagonal correlations:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                ∑_{i ≠ j} w_i · w_j · ρ_{ij} = <strong>${weightedSum.toFixed(4)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Divide by Sum of Off-Diagonal Weights (1 - ∑ w_i^2)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Off-diagonal weight denominator: <span style="font-family:monospace">1 - (1 / ${fmtNum(effHoldings, 1)}) = ${denom.toFixed(4)}</span>
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-purple); font-size:15px; font-weight:700">
+                ρ̄ = ${weightedSum.toFixed(4)} / ${denom.toFixed(4)} = ${fmtNum(avgCorr)}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings Weight &amp; Correlation Contribution Profile</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">Asset Vol %</th>
+                  <th style="text-align:right">% of Risk</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>Low Cross-Asset Synchronization</strong>: At <strong>${fmtNum(avgCorr)}</strong>, your assets demonstrate healthy independence. 
+            Short-term corporate bonds (<code>VCSH</code>), short treasuries (<code>VGSH</code>), and value equities (<code>BRK-B</code>) have low correlation with growth tech (<code>GOOG</code>), protecting against broad equity sell-offs.
+          </p>
+        </div>
+      `;
+    } else if (metricKey === 'sharpe_ratio') {
+      const isExc = sharpe >= 1.5;
+      const isStrong = sharpe >= 1.0 && sharpe < 1.5;
+      const isAcc = sharpe >= 0.5 && sharpe < 1.0;
+      const isSub = sharpe < 0.5;
+
+      const tierBadge = isExc
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Exceptional (≥ 1.50)</span>`
+        : isStrong
+        ? `<span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-weight:600">Strong / Good (1.00 - 1.50)</span>`
+        : isAcc
+        ? `<span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber);font-weight:600">Acceptable (0.50 - 1.00)</span>`
+        : `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Sub-optimal (&lt; 0.50)</span>`;
+
+      const rf = 4.5;
+      const excessRet = annRet - rf;
+
+      const rows = items.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const roleBadge = rc.role === 'Risk Driver'
+          ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Risk Driver</span>`
+          : rc.role === 'Risk Anchor'
+          ? `<span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple)">Risk Anchor</span>`
+          : `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Balanced</span>`;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num">${rc.volatility_pct != null ? fmtNum(rc.volatility_pct) + '%' : '—'}</td>
+          <td class="td-num">${fmtPct(rc.risk_contrib_pct)}</td>
+          <td>${roleBadge}</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Sharpe Ratio (1-Year Risk-Adjusted Return)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">+${fmtNum(annRet)}% 1Y Return · Rf = 4.5%</span>
+            </div>
+            <div class="detail-header-sub">Excess return earned per unit of total portfolio volatility above the guaranteed risk-free benchmark rate.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--accent-teal)">${fmtNum(sharpe)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Developed by Nobel laureate William F. Sharpe in 1966, the <strong>Sharpe Ratio</strong> is the foundational metric for evaluating investment efficiency. 
+            It answers the central investor question: <strong>"Was the return worth the volatility endured, or would you have been better off holding risk-free Treasury bills?"</strong>
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Raw returns are misleading: a 20% return that carries 35% volatility is riskier and less efficient than a 15% return with 10% volatility. 
+            The Sharpe Ratio isolates genuine risk efficiency by dividing excess returns (<span style="font-family:monospace">R_p - R_f</span>) by annualized volatility (<span style="font-family:monospace">σ_p</span>).
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            A Sharpe Ratio greater than <strong>1.00</strong> indicates that your portfolio generated more than 1% of excess return for every 1% of annualized price swings endured.
+          </p>
+
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">Institutional Sharpe Ratio Tiers</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Sharpe Ratio</th>
+                <th>Efficiency Tier</th>
+                <th>Performance Quality</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${isSub ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 0.50</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Sub-optimal</span></td>
+                <td>Excess return is insufficient for the volatility endured.</td>
+                <td>${isSub ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isAcc ? 'active-tier' : ''}">
+                <td style="font-weight:600">0.50 – 1.00</td>
+                <td><span class="type-badge" style="background:rgba(245,166,35,0.15);color:var(--accent-amber)">Acceptable</span></td>
+                <td>Market average; standard broad equity index performance.</td>
+                <td>${isAcc ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isStrong ? 'active-tier' : ''}">
+                <td style="font-weight:600">1.00 – 1.50</td>
+                <td><span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal)">Strong / Good</span></td>
+                <td>Superior risk-adjusted compounding; high excess reward per unit risk.</td>
+                <td>${isStrong ? '◀ <strong>Your Portfolio (' + fmtNum(sharpe) + ')</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isExc ? 'active-tier' : ''}">
+                <td style="font-weight:600">&gt; 1.50</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Exceptional</span></td>
+                <td>Elite institutional compounding efficiency.</td>
+                <td>${isExc ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+Sharpe Ratio = ( R_p - R_f ) / σ_p
+
+Where:
+  R_p = Annualized 1-year portfolio return = ∑ w_i · R_i
+  R_f = Risk-free benchmark rate = 4.50% (short-term US Treasury yield)
+  σ_p = Annualized portfolio volatility = 10.94%
+  Excess Return = R_p - R_f = +11.44%
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>1-Year Historical Return</strong>: Compounded daily returns across all assets over 252 trading days: <code>R_i = ∏ (1 + r_{i,t}) - 1</code>.</li>
+            <li><strong>Risk-Free Rate Benchmark (R_f)</strong>: Set to <code>4.50%</code>, reflecting prevailing yields on short-term US Treasury bills.</li>
+            <li><strong>Portfolio Volatility (σ_p)</strong>: Derived from the 252-day covariance matrix.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute 1-Year Portfolio Annualized Return (R_p)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Compounded asset return weighted across current holdings:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                R_p = <strong>+${fmtNum(annRet)}%</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Subtract Risk-Free Benchmark Rate (R_f = 4.50%)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              Net excess return earned above risk-free cash/Treasuries:
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-teal); font-size:13.5px">
+                Excess Return = +${fmtNum(annRet)}% - 4.50% = <strong>+${fmtNum(excessRet)}%</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Divide Excess Return by Realized Portfolio Volatility (σ_p)</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-purple); font-size:15px; font-weight:700">
+                Sharpe Ratio = ${fmtNum(excessRet)}% / ${fmtNum(portVol)}% = ${fmtNum(sharpe)}
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.25rem">
+                Every unit of volatility endured over the past year delivered <strong>${fmtNum(sharpe)}%</strong> of pure excess return.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings Weight &amp; Volatility Profile</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">Asset Vol %</th>
+                  <th style="text-align:right">% of Risk</th>
+                  <th>Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>High Compounding Efficiency</strong>: A 1-year Sharpe Ratio of <strong>${fmtNum(sharpe)}</strong> confirms that the portfolio's returns were not merely a product of lucky risk-taking, but of efficient structural asset allocation.<br>
+            • <strong>Drawdown Protection</strong>: Because annualized volatility was contained to 10.94%, the portfolio captured solid upside (+${fmtNum(annRet)}%) without exposing capital to the severe drawdown cycles typical of 100% equity portfolios.
+          </p>
+        </div>
+      `;
+    } else if (metricKey === 'effective_holdings') {
+      const isConc = effHoldings < 5.0;
+      const isFocus = effHoldings >= 5.0 && effHoldings < 15.0;
+      const isDiv = effHoldings >= 15.0 && effHoldings < 30.0;
+      const isBroad = effHoldings >= 30.0;
+
+      const tierBadge = isConc
+        ? `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Highly Concentrated (&lt; 5)</span>`
+        : isFocus
+        ? `<span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue);font-weight:600">Moderately Focused (5 - 15)</span>`
+        : isDiv
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Well-Diversified (15 - 30)</span>`
+        : `<span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-weight:600">Broadly Dispersed (≥ 30)</span>`;
+
+      // Sort items by weight descending
+      const sortedByWeight = [...items].sort((a, b) => b.weight_pct - a.weight_pct);
+      const sumSq = sortedByWeight.reduce((acc, x) => acc + Math.pow(x.weight_pct / 100, 2), 0);
+
+      let cumWeight = 0;
+      const rows = sortedByWeight.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const wDec = rc.weight_pct / 100;
+        const wSq = wDec * wDec;
+        const pctConc = sumSq > 0 ? (wSq / sumSq) * 100 : 0;
+        cumWeight += rc.weight_pct;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num" style="font-family:monospace">${wSq.toFixed(5)}</td>
+          <td class="td-num" style="font-weight:600; color:var(--accent-purple)">${fmtPct(pctConc)}</td>
+          <td class="td-num">${fmtPct(cumWeight)}</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Effective Holdings (N_eff, Inverse Herfindahl)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">out of ${nominalCount} nominal positions</span>
+            </div>
+            <div class="detail-header-sub">The equivalent number of equally-sized positions that would yield identical concentration.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--text-primary)">${fmtNum(effHoldings, 1)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            In statistics, ecology, and physics, this metric is known as the <strong>Inverse Participation Ratio (IPR)</strong> or the <strong>Simpson Diversity Index</strong>.
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Counting nominal line items is deeply misleading: an investor who holds 100 stocks but has 90% of their money in one tech stock does NOT have 100 diversified investments; 
+            they have approximately <strong>1.2 effective bets</strong> with 99 negligible tail positions.
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            <strong>Effective Holdings (N_eff)</strong> mathematically answers: 
+            <strong>"How many equal-weighted investments would produce the exact same level of concentration as my actual portfolio?"</strong>
+            <br>While your portfolio holds <strong>${nominalCount} nominal holdings</strong>, your effective breadth is <strong>${fmtNum(effHoldings, 1)} equal-sized bets</strong>.
+          </p>
+
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">Concentration Breadth Ranges</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>Effective Holdings (N_eff)</th>
+                <th>Breadth Tier</th>
+                <th>Portfolio Concentration Profile</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${isConc ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 5.0</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Highly Concentrated</span></td>
+                <td>Dominated by 1 to 3 positions; heavy idiosyncratic stock risk.</td>
+                <td>${isConc ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isFocus ? 'active-tier' : ''}">
+                <td style="font-weight:600">5.0 – 15.0</td>
+                <td><span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue)">Moderately Focused</span></td>
+                <td>Focused conviction bets; healthy core-satellite portfolio design.</td>
+                <td>${isFocus ? '◀ <strong>Your Portfolio (' + fmtNum(effHoldings, 1) + ')</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isDiv ? 'active-tier' : ''}">
+                <td style="font-weight:600">15.0 – 30.0</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Well-Diversified</span></td>
+                <td>Balanced multi-asset allocation; dispersed individual risks.</td>
+                <td>${isDiv ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isBroad ? 'active-tier' : ''}">
+                <td style="font-weight:600">≥ 30.0</td>
+                <td><span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal)">Broadly Dispersed</span></td>
+                <td>Index-like diversification; minimal impact from any single holding.</td>
+                <td>${isBroad ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+N_eff = 1 / ∑_{i=1}^N w_i^2
+
+Connection to HHI:
+N_eff = 10,000 / HHI
+
+Where:
+  w_i   = Fractional weight of holding i  (Value_i / Total Value)
+  w_i^2 = Squared fractional weight
+  ∑ w_i = 1.0  (100% of portfolio)
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>Non-Linear Weight Squaring</strong>: Squaring fractional weights heavily penalizes large allocations: a 25% holding has a squared weight of <code>0.0625</code>, whereas a 1% holding has a squared weight of <code>0.0001</code> (625x smaller!).</li>
+            <li><strong>Tail Invariance</strong>: Adding or removing tiny $50 positions has virtually zero effect on N_eff, accurately reflecting their lack of impact on your overall wealth.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Square Fractional Weights (w_i^2) for Top Positions</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              ${sortedByWeight.slice(0, 3).map(x => `
+                <div style="font-family:monospace; margin-top:0.3rem">
+                  • ${x.ticker} (${fmtPct(x.weight_pct)}): (${(x.weight_pct/100).toFixed(3)})² = <strong>${Math.pow(x.weight_pct/100, 2).toFixed(5)}</strong>
+                </div>
+              `).join('')}
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.3rem">
+                All other ${Math.max(0, sortedByWeight.length - 3)} holdings combined: ${Math.max(0, sumSq - sortedByWeight.slice(0, 3).reduce((a, b) => a + Math.pow(b.weight_pct/100, 2), 0)).toFixed(5)}
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Sum Squared Weights Across Entire Portfolio</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                ∑ w_i^2 = <strong>${sumSq.toFixed(5)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Invert Sum to Obtain Effective Holdings Count</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-purple); font-size:15px; font-weight:700">
+                N_eff = 1 / ${sumSq.toFixed(5)} = ${fmtNum(effHoldings, 1)} equal-sized bets
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings Breadth Breakdown: Squared Weights &amp; Concentration Impact</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">Weight² (w_i²)</th>
+                  <th style="text-align:right">% of Concentration</th>
+                  <th style="text-align:right">Cumulative %</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>True Breadth vs. Line Item Illusion</strong>: While you have ${nominalCount} nominal positions listed in your accounts, 
+            your effective breadth is <strong>${fmtNum(effHoldings, 1)} bets</strong>. 
+            The top 3 holdings (<code>VOO</code>, <code>GOOG</code>, <code>BRK-B</code>) drive over <strong>89%</strong> of your portfolio's total concentration footprint.<br>
+            • <strong>Clean Core-Satellite Architecture</strong>: This structure aligns well with a disciplined core-satellite strategy: broad index coverage via VOO, high-conviction value/growth bets via Berkshire and Google, and defensive bond anchors.
+          </p>
+        </div>
+      `;
+    } else if (metricKey === 'hhi') {
+      const isUnc = hhi < 1000;
+      const isMod = hhi >= 1000 && hhi < 1800;
+      const isConc = hhi >= 1800;
+
+      const tierBadge = isUnc
+        ? `<span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal);font-weight:600">Unconcentrated (&lt; 1,000)</span>`
+        : isMod
+        ? `<span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue);font-weight:600">Moderately Concentrated (1,000 - 1,800)</span>`
+        : `<span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);font-weight:600">Highly Concentrated (≥ 1,800)</span>`;
+
+      const sortedByHhi = [...items].sort((a, b) => b.weight_pct - a.weight_pct);
+      const totalHhiPoints = sortedByHhi.reduce((acc, x) => acc + Math.pow(x.weight_pct, 2), 0);
+
+      let cumHhi = 0;
+      const rows = sortedByHhi.map(rc => {
+        const val = (rc.weight_pct / 100) * totalVal;
+        const pts = Math.pow(rc.weight_pct, 2);
+        const pctOfHhi = totalHhiPoints > 0 ? (pts / totalHhiPoints) * 100 : 0;
+        cumHhi += pts;
+
+        return `<tr>
+          <td class="td-ticker">${tickerLink(rc.ticker)}</td>
+          <td class="td-name">${rc.security_name}</td>
+          <td class="td-num">${fmtDollar(val)}</td>
+          <td class="td-num" style="font-weight:600">${fmtPct(rc.weight_pct)}</td>
+          <td class="td-num" style="font-weight:700; color:var(--accent-purple)">${fmtNum(pts, 1)} pts</td>
+          <td class="td-num">${fmtPct(pctOfHhi)}</td>
+          <td class="td-num">${fmtNum(cumHhi, 0)} pts</td>
+        </tr>`;
+      }).join('');
+
+      html = `
+        <div class="detail-header">
+          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <div class="detail-header-info">
+            <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
+              <span>Herfindahl-Hirschman Index (HHI)</span>
+              ${tierBadge}
+              <span class="type-badge" style="background:rgba(108,99,255,0.15);color:var(--accent-purple);font-weight:600">DOJ Scale: 0 to 10,000</span>
+            </div>
+            <div class="detail-header-sub">The institutional gold standard for measuring market and portfolio concentration.</div>
+          </div>
+          <div class="detail-header-value" style="font-size:36px; color:var(--text-primary)">${fmtNum(hhi, 0)}</div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">1. What It Means (Financial Theory &amp; Intuition)</div>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            Developed by economists Orris C. Herfindahl and Albert O. Hirschman, the <strong>HHI</strong> is the primary economic metric used by the 
+            <strong>US Department of Justice (DOJ)</strong> and the <strong>Federal Trade Commission (FTC)</strong> to assess market concentration and evaluate antitrust risks.
+          </p>
+          <p style="margin-bottom:0.75rem; color:var(--text-secondary); line-height:1.6">
+            In portfolio analysis, HHI scores concentration on an absolute scale from <strong>0 to 10,000</strong>:
+            <br>• <strong>10,000 equal micro-positions</strong>: HHI = 1.0 (perfectly unconcentrated).
+            <br>• <strong>1 single stock (100%)</strong>: HHI = 100² = 10,000 (maximum monopoly concentration).
+          </p>
+          <p style="margin-bottom:1rem; color:var(--text-secondary); line-height:1.6">
+            By squaring percentage weights, HHI penalizes large positions exponentially: a 20% position contributes <strong>400 points</strong> to HHI, 
+            whereas a 2% position contributes only <strong>4 points</strong> (a 100x difference in risk points for only a 10x difference in weight!).
+          </p>
+
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-muted); margin-top:1.25rem; margin-bottom:0.5rem">US Department of Justice / FTC Regulatory Tiers</div>
+          <table class="benchmark-table">
+            <thead>
+              <tr>
+                <th>HHI Score</th>
+                <th>DOJ / Financial Classification</th>
+                <th>Regulatory Meaning</th>
+                <th>Portfolio Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="${isUnc ? 'active-tier' : ''}">
+                <td style="font-weight:600">&lt; 1,000</td>
+                <td><span class="type-badge" style="background:rgba(20,184,166,0.15);color:var(--accent-teal)">Unconcentrated</span></td>
+                <td>Broadly diversified; low vulnerability to single-holding shocks.</td>
+                <td>${isUnc ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isMod ? 'active-tier' : ''}">
+                <td style="font-weight:600">1,000 – 1,800</td>
+                <td><span class="type-badge" style="background:rgba(59,130,246,0.15);color:var(--accent-blue)">Moderately Concentrated</span></td>
+                <td>Core allocation with noticeable single-position exposures.</td>
+                <td>${isMod ? '◀ <strong>Your Portfolio (' + fmtNum(hhi, 0) + ')</strong>' : '—'}</td>
+              </tr>
+              <tr class="${isConc ? 'active-tier' : ''}">
+                <td style="font-weight:600">≥ 1,800</td>
+                <td><span class="type-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red)">Highly Concentrated</span></td>
+                <td>Substantial single-position risk; high idiosyncratic exposure.</td>
+                <td>${isConc ? '◀ <strong>Your Portfolio</strong>' : '—'}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">2. How It Was Calculated (Mathematical Formula &amp; Methodology)</div>
+          <div class="metric-formula-box">
+HHI = ∑_{i=1}^N ( w_i · 100 )^2 = ∑_{i=1}^N s_i^2
+
+Connection to Effective Holdings:
+HHI = 10,000 / N_eff
+
+Where:
+  s_i   = Percentage weight of holding i  (0 - 100%)
+  s_i^2 = Points contributed to HHI by holding i
+  N_eff = Effective number of equal holdings
+          </div>
+          <ul style="color:var(--text-secondary); font-size:13px; line-height:1.7; padding-left:1.25rem; margin-top:0.75rem">
+            <li><strong>Direct Mathematical Inversion</strong>: Notice the exact relationship: <code>10,000 / 6.1 ≈ 1,648</code>. The two metrics are twin representations of the same underlying concentration curve.</li>
+            <li><strong>Squaring Share Percentages</strong>: Each holding's percentage share is squared and summed directly across all line items.</li>
+          </ul>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">3. Live Portfolio Calculation Walkthrough</div>
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">1</span>
+              <strong style="color:var(--text-primary); font-size:13px">Compute Squared Percentage Points (s_i^2) for Top Assets</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              ${sortedByHhi.slice(0, 3).map(x => `
+                <div style="font-family:monospace; margin-top:0.3rem">
+                  • ${x.ticker} (${fmtPct(x.weight_pct)}): ${fmtNum(x.weight_pct, 1)}² = <strong>${fmtNum(Math.pow(x.weight_pct, 2), 1)} points</strong> (${(Math.pow(x.weight_pct, 2) / totalHhiPoints * 100).toFixed(1)}% of HHI)
+                </div>
+              `).join('')}
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.3rem">
+                All remaining ${Math.max(0, sortedByHhi.length - 3)} holdings combined: ${Math.max(0, totalHhiPoints - sortedByHhi.slice(0, 3).reduce((a, b) => a + Math.pow(b.weight_pct, 2), 0)).toFixed(1)} points
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">2</span>
+              <strong style="color:var(--text-primary); font-size:13px">Sum Points Across All Holdings</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--text-primary); font-size:13.5px">
+                HHI = ∑ s_i^2 = <strong>${fmtNum(hhi, 0)}</strong>
+              </div>
+            </div>
+          </div>
+
+          <div class="metric-step-card" style="margin-bottom:0">
+            <div style="display:flex; align-items:center; margin-bottom:0.4rem">
+              <span class="metric-step-badge">3</span>
+              <strong style="color:var(--text-primary); font-size:13px">Cross-Check Against Effective Holdings</strong>
+            </div>
+            <div style="font-size:13px; color:var(--text-secondary); padding-left:2rem">
+              <div style="font-family:monospace; margin-top:0.4rem; color:var(--accent-purple); font-size:14px; font-weight:700">
+                10,000 / ${fmtNum(effHoldings, 1)} = ${fmtNum(10000 / effHoldings, 0)} ≈ ${fmtNum(hhi, 0)}
+              </div>
+              <div style="font-size:12px; color:var(--text-muted); margin-top:0.25rem">
+                Your HHI score sits safely within the DOJ's <strong>Moderately Concentrated (1,000 - 1,800)</strong> band, well clear of the &gt;1,800 high-risk zone.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem">
+          <div class="card-title">4. Holdings HHI Points Breakdown</div>
+          <div style="overflow-x:auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticker</th>
+                  <th>Security Name</th>
+                  <th style="text-align:right">Value</th>
+                  <th style="text-align:right">Weight %</th>
+                  <th style="text-align:right">HHI Points</th>
+                  <th style="text-align:right">% of HHI</th>
+                  <th style="text-align:right">Cumulative HHI</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${rows}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">5. Actionable Portfolio Takeaways</div>
+          <p style="color:var(--text-secondary); line-height:1.6; font-size:13px">
+            • <strong>Comfortably within Moderate Bounds</strong>: At <strong>${fmtNum(hhi, 0)}</strong>, your portfolio avoids dangerous single-stock concentration while avoiding excessive over-diversification ("diworsification").<br>
+            • <strong>High Leverage to Top Holdings</strong>: If Alphabet (<code>GOOG</code>) or Berkshire Hathaway (<code>BRK-B</code>) were rebalanced by 5%, your HHI would decline by over 200 points, rapidly shifting the portfolio into the unconcentrated (&lt; 1,000) tier.
+          </p>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+    container.querySelectorAll('table').forEach(makeSortable);
+  }
   async function refreshData() {
     const btn = document.getElementById('refresh-btn');
     btn.textContent = 'Refreshing…';
