@@ -1022,6 +1022,70 @@
   let _assetFilter = null;
   let _sectorFilter = null;
 
+  // ── Unified Navigation Stack & History ─────────────────────────
+  let _navStack = [];
+  let _currentView = { type: 'tab', tab: 'portfolio', title: 'Portfolio' };
+  let _ignoreNextPopState = false;
+
+  function getTabTitle(tab) {
+    const titles = {
+      'portfolio': 'Portfolio',
+      'risk': 'Risk & Diversification',
+      'efficiency': 'Efficiency',
+      'valuation': 'Valuation',
+      'dividends': 'Dividends',
+      'earnings': 'Earnings',
+      'accounts': 'Accounts',
+      'risk-metric': 'Risk Metric'
+    };
+    return titles[tab] || 'Portfolio';
+  }
+
+  function getRiskMetricTitle(key) {
+    const titles = {
+      'diversification_ratio': 'Diversification Ratio',
+      'portfolio_volatility': 'Portfolio Volatility',
+      'avg_pairwise_correlation': 'Avg Pairwise Correlation',
+      'sharpe_ratio': 'Sharpe Ratio',
+      'effective_holdings': 'Effective Holdings',
+      'hhi': 'Herfindahl Index'
+    };
+    return titles[key] || 'Risk Metric';
+  }
+
+  function navigateBack(fromPopstate = false) {
+    if (!fromPopstate && window.history.state && window.history.state.navIndex) {
+      _ignoreNextPopState = true;
+      window.history.back();
+    }
+    if (_navStack.length === 0) {
+      if (_currentView && _currentView.type === 'risk-metric') {
+        switchTab('risk', true);
+      } else {
+        switchTab(_activeTab && _activeTab !== 'risk-metric' ? _activeTab : 'portfolio', true);
+      }
+      return;
+    }
+    const prev = _navStack.pop();
+    if (prev.type === 'tab') {
+      switchTab(prev.tab, true);
+    } else if (prev.type === 'risk-metric') {
+      showRiskMetricDetail(prev.metricKey, true);
+    } else if (prev.type === 'ticker') {
+      showTickerDetail(null, prev.ticker, true);
+    }
+  }
+
+  window.addEventListener('popstate', () => {
+    if (_ignoreNextPopState) {
+      _ignoreNextPopState = false;
+      return;
+    }
+    if (_navStack.length > 0) {
+      navigateBack(true);
+    }
+  });
+
   // ── Portfolio management ──────────────────────────────────────
   async function loadPortfolios() {
     try {
@@ -1040,6 +1104,8 @@
     document.getElementById('loading').textContent = 'Switching portfolio…';
     _marketData = null;
     _taxData = null;
+    _navStack = [];
+    _currentView = { type: 'tab', tab: _activeTab || 'portfolio', title: getTabTitle(_activeTab || 'portfolio') };
     try {
       const data = await fetch(`/api/switch-portfolio?path=${encodeURIComponent(path)}`).then(r => r.json());
       _summaryData = data;
@@ -1065,8 +1131,13 @@
   }
 
   // ── Tab switching ─────────────────────────────────────────────
-  function switchTab(name) {
+  function switchTab(name, isBack = false) {
     _activeTab = name;
+    if (!isBack) {
+      _navStack = [];
+    }
+    _currentView = { type: 'tab', tab: name, title: getTabTitle(name) };
+
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.classList.toggle('active', btn.getAttribute('onclick') === `switchTab('${name}')`);
     });
@@ -1087,7 +1158,7 @@
     } else if (name === 'accounts') {
       loadAccounts();
     } else if (name === 'risk-metric' && _currentRiskMetricKey) {
-      showRiskMetricDetail(_currentRiskMetricKey);
+      showRiskMetricDetail(_currentRiskMetricKey, isBack);
     }
   }
 
@@ -2914,13 +2985,24 @@
   }
 
   // ── Ticker Detail view ────────────────────────────────────────
-  async function showTickerDetail(event, ticker) {
+  async function showTickerDetail(event, ticker, isBack = false) {
     if (typeof event === 'string') {
       ticker = event;
       event = null;
     }
     if (event && event.stopPropagation) event.stopPropagation();
     if (!ticker) return;
+
+    if (!isBack && _currentView) {
+      if (!(_currentView.type === 'ticker' && _currentView.ticker === ticker)) {
+        _navStack.push(_currentView);
+        try {
+          window.history.pushState({ navIndex: _navStack.length }, '');
+        } catch (e) {}
+      }
+    }
+    _currentView = { type: 'ticker', ticker: ticker, title: ticker };
+
     document.getElementById('loading').classList.remove('hidden');
     document.getElementById('loading').textContent = `Loading ${ticker}…`;
     
@@ -2930,6 +3012,9 @@
       if (data.message) {
         alert(data.message);
         document.getElementById('loading').classList.add('hidden');
+        if (!isBack && _navStack.length > 0) {
+          _currentView = _navStack.pop();
+        }
         return;
       }
       
@@ -3042,21 +3127,23 @@
         </div>`;
       }
 
-      const isFromRiskMetric = _activeTab === 'risk-metric';
-      const activeTabTitle = isFromRiskMetric ? 'Risk Metric' :
-                             _activeTab === 'dividends' ? 'Dividends' :
-                             _activeTab === 'earnings' ? 'Earnings' :
-                             _activeTab === 'valuation' ? 'Valuation' :
-                             _activeTab === 'efficiency' ? 'Efficiency' :
-                             _activeTab === 'risk' ? 'Risk' :
-                             _activeTab === 'accounts' ? 'Accounts' : 'Portfolio';
-      const backOnclick = isFromRiskMetric
-        ? `showRiskMetricDetail('${_currentRiskMetricKey || 'diversification_ratio'}')`
-        : `switchTab('${_activeTab}')`;
+      const prevNav = _navStack.length > 0 ? _navStack[_navStack.length - 1] : null;
+      let backTitle = 'Portfolio';
+      if (prevNav) {
+        if (prevNav.type === 'ticker') {
+          backTitle = prevNav.ticker;
+        } else if (prevNav.type === 'risk-metric') {
+          backTitle = getRiskMetricTitle(prevNav.metricKey);
+        } else if (prevNav.type === 'tab') {
+          backTitle = getTabTitle(prevNav.tab);
+        }
+      } else {
+        backTitle = getTabTitle(_activeTab || 'portfolio');
+      }
 
       document.getElementById('ticker-content').innerHTML = `
         <div class="detail-header">
-          <button class="detail-back" onclick="${backOnclick}">← Back to ${activeTabTitle}</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${backTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex;align-items:center;gap:0.5rem">
               ${ticker} <span class="type-badge" style="background:${color}22;color:${color}">${data.type_display}</span>
@@ -3095,6 +3182,7 @@
       document.querySelectorAll('#ticker-content table').forEach(makeSortable);
       
       document.getElementById('loading').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       console.error(err);
       alert('Failed to load ticker: ' + err.message);
@@ -3105,9 +3193,19 @@
   // ── Dedicated Risk Metric Detail Views ─────────────────────────
   let _currentRiskMetricKey = null;
 
-  async function showRiskMetricDetail(metricKey) {
+  async function showRiskMetricDetail(metricKey, isBack = false) {
+    if (!isBack && _currentView) {
+      if (!(_currentView.type === 'risk-metric' && _currentView.metricKey === metricKey)) {
+        _navStack.push(_currentView);
+        try {
+          window.history.pushState({ navIndex: _navStack.length }, '');
+        } catch (e) {}
+      }
+    }
     _currentRiskMetricKey = metricKey;
     _activeTab = 'risk-metric';
+    _currentView = { type: 'risk-metric', metricKey: metricKey, title: getRiskMetricTitle(metricKey) };
+
     document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
     document.getElementById('panel-risk-metric').classList.add('active');
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -3176,6 +3274,15 @@
         }));
 
     let html = '';
+    const prevNav = _navStack.length > 0 ? _navStack[_navStack.length - 1] : null;
+    let metricBackTitle = 'Risk &amp; Diversification';
+    if (prevNav) {
+      if (prevNav.type === 'ticker') {
+        metricBackTitle = prevNav.ticker;
+      } else if (prevNav.type === 'tab') {
+        metricBackTitle = getTabTitle(prevNav.tab);
+      }
+    }
 
     if (metricKey === 'diversification_ratio') {
       const isHigh = dr >= 1.35;
@@ -3209,7 +3316,7 @@
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Diversification Ratio (DR)</span>
@@ -3423,7 +3530,7 @@ Where:
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Portfolio Volatility (σ_p, 1-Year Annualized)</span>
@@ -3620,7 +3727,7 @@ Marginal Contribution to Risk (MCR_i):
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Average Pairwise Correlation (ρ̄)</span>
@@ -3809,7 +3916,7 @@ Where:
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Sharpe Ratio (1-Year Risk-Adjusted Return)</span>
@@ -4005,7 +4112,7 @@ Where:
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Effective Holdings (N_eff, Inverse Herfindahl)</span>
@@ -4200,7 +4307,7 @@ Where:
 
       html = `
         <div class="detail-header">
-          <button class="detail-back" onclick="switchTab('risk')">← Back to Risk &amp; Diversification</button>
+          <button class="detail-back" onclick="navigateBack()">← Back to ${metricBackTitle}</button>
           <div class="detail-header-info">
             <div class="detail-header-title" style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap">
               <span>Herfindahl-Hirschman Index (HHI)</span>
