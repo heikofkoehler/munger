@@ -72,7 +72,8 @@ def deduplicate(df):
     # 1. Apply TICKER_OVERRIDES first (using security_id or raw name)
     # This ensures that items with empty tickers are merged correctly.
     def get_initial_ticker(row):
-        t = row.get("ticker") or ""
+        val = row.get("ticker")
+        t = "" if (pd.isna(val) or val is None) else str(val).strip()
         if not t or t.startswith("UNKNOWN"):
             # Check if security_id or name is in overrides
             sid = str(row.get("security_id", ""))

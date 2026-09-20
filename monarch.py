@@ -188,12 +188,16 @@ def to_dataframe(data: dict):
                 "institution_name": acct["institution"]["name"],
                 "holding_name":     h["name"],
                 "ticker":           ticker,
+                "type":             h.get("type") or sec.get("type") or "",
                 "type_display":     h["typeDisplay"],
                 "quantity":         h["quantity"],
+                "closing_price":    h.get("closingPrice"),
                 "value":            h["value"],
                 "cost_basis":       h.get("costBasis"),
                 "security_id":      security_id,
                 "security_name":    security_name,
+                "security_ticker":  security_ticker,
+                "current_price":    sec.get("currentPrice"),
                 "price_updated":    h.get("closingPriceUpdatedAt") or "",
             })
 
@@ -216,6 +220,13 @@ def main():
         default=os.environ.get("MONARCH_JSON_PATH", "monarch_response.json"),
         help="Output JSON path (default: monarch_response.json)",
     )
+    parser.add_argument(
+        "--csv",
+        nargs="?",
+        const=os.environ.get("CSV_PATH", "portfolio_holdings.csv"),
+        default=None,
+        help="Export holdings DataFrame to CSV (default: portfolio_holdings.csv or CSV_PATH)",
+    )
     args = parser.parse_args()
 
     if args.token:
@@ -234,6 +245,10 @@ def main():
 
     data = fetch(cookie=cookie, token=token, output_path=args.output)
     df = to_dataframe(data)
+
+    if args.csv:
+        df.to_csv(args.csv, index=False)
+        print(f"Saved CSV holdings → {args.csv}", flush=True)
 
     perf = data["data"]["portfolio"]["performance"]
     print(f"Total value:  ${perf['totalValue']:,.2f}")

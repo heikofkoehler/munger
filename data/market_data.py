@@ -63,8 +63,16 @@ def get_fund_details(ticker: str) -> dict:
     _fund_cache[ticker] = res
     return res
 
-YFINANCE_SKIP_TICKERS: set = {"FCASH", "CUR:USD"}
+YFINANCE_SKIP_TICKERS: set = {
+    "FCASH", "CUR:USD", "CUR-USD", "USD-USD", "USD", "SPAXX", "FDRXX",
+    "QZONQ", "QOKIQ", "QHUNQ", "QUSCQ", "CASH"
+}
 _market_cache: dict = {}  # keyed by ticker string
+
+def clear_market_cache() -> None:
+    """Clear in-memory market and fund caches."""
+    _market_cache.clear()
+    _fund_cache.clear()
 
 def enrich_with_market_data(positions: list) -> list:
     """
@@ -99,7 +107,7 @@ def enrich_with_market_data(positions: list) -> list:
     # Collect unique tickers to fetch
     unique_tickers = {
         p["ticker"] for p in positions
-        if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS
+        if p.get("ticker") and p["ticker"] not in YFINANCE_SKIP_TICKERS and p.get("type_display") != "Cash"
     }
 
     # 1. Fetch data for primary tickers
@@ -107,13 +115,35 @@ def enrich_with_market_data(positions: list) -> list:
         if t in _market_cache:
             continue
         cached = _yf_db_get(t, "market")
-        if cached:
+        if cached and any(cached.get(k) is not None for k in ["dividend_yield", "trailing_pe", "market_cap"]):
             _market_cache[t] = cached
             continue
         try:
             ticker_obj = yf.Ticker(t)
-            info = ticker_obj.info
-            _market_cache[t] = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+            info = ticker_obj.info or {}
+            entry = {k: info.get(yf_key) for k, yf_key in _YF_MAP.items()}
+
+            # Robust dividend yield fallback (yfinance sometimes uses trailingAnnualDividendYield in decimal)
+            if entry["dividend_yield"] is None:
+                if info.get("trailingAnnualDividendYield") is not None:
+                    entry["dividend_yield"] = info.get("trailingAnnualDividendYield") * 100.0
+                elif info.get("yield") is not None:
+                    entry["dividend_yield"] = info.get("yield") * 100.0
+
+            # Robust dividend rate fallback
+            if entry["dividend_rate"] is None:
+                if info.get("trailingAnnualDividendRate") is not None:
+                    entry["dividend_rate"] = info.get("trailingAnnualDividendRate")
+
+            # Cross-calculate dividend_rate / dividend_yield if current price is available
+            price = info.get("currentPrice") or info.get("regularMarketPrice") or info.get("previousClose")
+            if price and price > 0:
+                if entry["dividend_rate"] is None and entry["dividend_yield"] is not None:
+                    entry["dividend_rate"] = round((entry["dividend_yield"] / 100.0) * price, 4)
+                elif entry["dividend_yield"] is None and entry["dividend_rate"] is not None:
+                    entry["dividend_yield"] = round((entry["dividend_rate"] / price) * 100.0, 4)
+
+            _market_cache[t] = entry
 
             # 2. Look-through for ETFs
             # If it's an ETF and missing Trailing PE, or if we want better accuracy via look-through
@@ -131,11 +161,12 @@ def enrich_with_market_data(positions: list) -> list:
                             _market_cache[ut] = ut_cached
                             continue
                         try:
-                            u_info = yf.Ticker(ut).info
+                            u_info = yf.Ticker(ut).info or {}
                             _market_cache[ut] = {k: u_info.get(yf_key) for k, yf_key in _YF_MAP.items()}
                             _yf_db_set(ut, "market", _market_cache[ut])
                         except Exception:
-                            _market_cache[ut] = {k: None for k in _FIELDS}
+                            stale_ut = _yf_db_get(ut, "market", allow_stale=True)
+                            _market_cache[ut] = stale_ut if stale_ut else {k: None for k in _FIELDS}
 
                     for h in details["holdings"]:
                         h_ticker = h["ticker"]
@@ -151,18 +182,26 @@ def enrich_with_market_data(positions: list) -> list:
                             _market_cache[t]["trailing_pe"] = 1.0 / avg_yield
                             print(f"Look-through: ETF {t} calculated PE {1.0/avg_yield:.2f} via {weight_covered:.1%} coverage", flush=True)
 
-            _yf_db_set(t, "market", _market_cache[t])
+            if any(_market_cache[t].get(k) is not None for k in ["dividend_yield", "dividend_rate", "trailing_pe", "market_cap"]):
+                _yf_db_set(t, "market", _market_cache[t])
         except Exception:
-            _market_cache[t] = {k: None for k in _FIELDS}
+            stale = _yf_db_get(t, "market", allow_stale=True)
+            if stale:
+                _market_cache[t] = stale
+            else:
+                _market_cache[t] = {k: None for k in _FIELDS}
 
     enriched = []
     for pos in positions:
         p = dict(pos)
         ticker = p.get("ticker", "")
-        if ticker and ticker not in YFINANCE_SKIP_TICKERS:
+        is_cash = p.get("type_display") == "Cash" or ticker in YFINANCE_SKIP_TICKERS
+        if ticker and not is_cash:
             market = _market_cache.get(ticker, {k: None for k in _FIELDS})
         else:
             market = {k: None for k in _FIELDS}
+            if is_cash:
+                market["sector"] = "Cash"
         p.update(market)
         from metrics.tax import classify_dividend_treatment
         p["dividend_treatment"] = classify_dividend_treatment(ticker, p.get("type_display", ""), p.get("sector", ""))

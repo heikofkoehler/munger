@@ -19,7 +19,7 @@ from core.config import check_gitignore
 from data.sources import load
 from data.vanguard import download_voo_holdings
 from data.normalization import deduplicate, normalize_asset_class
-from data.market_data import enrich_with_market_data, get_fund_details
+from data.market_data import enrich_with_market_data, get_fund_details, clear_market_cache
 from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot
 from metrics.tax import calculate_tax_buckets
@@ -60,6 +60,7 @@ def _build_cache(source_path: str = None) -> None:
         
         # Clear existing caches
         _cache.clear()
+        clear_market_cache()
         
         _cache["summary"] = {
             **calculate_metrics(df),
@@ -168,6 +169,7 @@ def valuation():
 def refresh():
     download_voo_holdings()
     clear_valuation_cache()
+    clear_market_cache()
     _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
 

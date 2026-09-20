@@ -2180,17 +2180,34 @@
       for (const acct of bucket.accounts) {
         for (const h of acct.holdings) {
           const key = h.ticker || h.security_name;
-          if (!agg[key]) agg[key] = { ticker: h.ticker, security_name: h.security_name, value: 0, type_display: h.type_display, dividend_treatment: h.dividend_treatment };
+          if (!agg[key]) agg[key] = { 
+            ticker: h.ticker, 
+            security_name: h.security_name, 
+            value: 0, 
+            quantity: 0,
+            type_display: h.type_display, 
+            dividend_treatment: h.dividend_treatment 
+          };
           agg[key].value += h.value;
+          agg[key].quantity += (h.quantity || 0);
         }
       }
       const positions = Object.values(agg)
         .map(h => ({ ...(h.ticker ? (mktMap[h.ticker] || {}) : {}), ...h }))
-        // Use value × yield (not quantity × rate) — quantity is the global total, value is bucket-specific
+        // Calculate yield and rate cross-fallbacks
         .map(p => {
-          const inc = (p.dividend_yield && p.value) ? p.value * p.dividend_yield / 100 : null;
+          let yieldPct = p.dividend_yield;
+          let rate = p.dividend_rate;
+          const price = p.closing_price || (p.quantity > 0 ? p.value / p.quantity : null);
+          if (yieldPct == null && rate != null && price && price > 0) {
+            yieldPct = (rate / price) * 100;
+          }
+          if (rate == null && yieldPct != null && price && price > 0) {
+            rate = (yieldPct / 100) * price;
+          }
+          const inc = (yieldPct && p.value) ? p.value * yieldPct / 100 : (rate && p.quantity ? p.quantity * rate : null);
           const treat = getDividendTreatment(p);
-          return { ...p, _income: inc, _treatment: treat };
+          return { ...p, dividend_yield: yieldPct, dividend_rate: rate, _income: inc, _treatment: treat };
         })
         .sort((a, b) => (b._income || 0) - (a._income || 0));
 
@@ -2214,13 +2231,13 @@
         typeIncome[type] = (typeIncome[type] || 0) + (p._income || 0);
       }
 
-      const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollar(bucketIncome)}/yr</span>`;
+      const incomeTag = `<span style="color:var(--accent-teal);font-weight:600;font-size:12px">${fmtDollarFull(bucketIncome)}/yr</span>`;
 
       const rows = positions.map(p => {
         const ticker = tickerLink(p.ticker || (p.security_name || '').slice(0, 15));
         const annualRate = p.dividend_rate != null ? '$' + fmtNum(p.dividend_rate) : '—';
         const yld = p.dividend_yield != null ? fmtNum(p.dividend_yield) + '%' : '—';
-        const inc = p._income != null ? fmtDollar(p._income) : '—';
+        const inc = p._income != null ? fmtDollarFull(p._income) : '—';
         const type = p.type_display || '—';
         const color = colorFor(type);
         const isQual = p._treatment === 'Qualified';
@@ -2254,12 +2271,12 @@
           <tfoot><tr style="border-top:1px solid var(--border)">
             ${isTaxable ? `
             <td colspan="7" style="padding:0.7rem 0.75rem;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">
-              Subtotal: <span style="color:var(--accent-teal)">Qualified: ${fmtDollar(bucketQualified)}</span> &nbsp;·&nbsp; <span style="color:var(--accent-amber)">Regular Income: ${fmtDollar(bucketNonQualified)}</span>
+              Subtotal: <span style="color:var(--accent-teal)">Qualified: ${fmtDollarFull(bucketQualified)}</span> &nbsp;·&nbsp; <span style="color:var(--accent-amber)">Regular Income: ${fmtDollarFull(bucketNonQualified)}</span>
             </td>` : `
             <td colspan="6" style="padding:0.7rem 0.75rem;color:var(--text-muted);font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em">
               Subtotal
             </td>`}
-            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollar(bucketIncome)}</td>
+            <td style="padding:0.7rem 0.75rem;text-align:right;color:var(--accent-teal);font-weight:700;font-variant-numeric:tabular-nums">${fmtDollarFull(bucketIncome)}</td>
           </tr></tfoot>
         </table>
       </div>`;
@@ -2289,8 +2306,8 @@
     document.getElementById('div-content').innerHTML = `
       <div class="hero" style="margin-bottom:1.5rem">
         <div class="hero-label">Projected Annual Income</div>
-        <div class="hero-value" style="color:var(--accent-teal)">${fmtDollar(totalIncome)}</div>
-        <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total portfolio: ${fmtDollarFull(totalValue)} &nbsp;·&nbsp; Tax-Sheltered (Retirement): ${fmtDollar(shelteredIncome)}/yr (${shelteredPct.toFixed(0)}%)</div>
+        <div class="hero-value" style="color:var(--accent-teal)">${fmtDollarFull(totalIncome)}</div>
+        <div class="hero-sub">Yield on value: ${fmtNum(yieldOnValue)}% &nbsp;·&nbsp; Total portfolio: ${fmtDollarFull(totalValue)} &nbsp;·&nbsp; Tax-Sheltered (Retirement): ${fmtDollarFull(shelteredIncome)}/yr (${shelteredPct.toFixed(0)}%)</div>
       </div>
 
       <div class="grid-2" style="max-width:960px; margin:0 auto 1.5rem; gap:1.25rem">
@@ -2300,7 +2317,7 @@
             <span class="type-badge" style="background:rgba(34,197,94,0.15);color:var(--accent-teal);font-size:11px;font-weight:600">Preferential Rate (15–20%)</span>
           </div>
           <div class="hero-value" style="font-size:26px; color:var(--accent-teal); margin-top:0.4rem; text-align:left">
-            ${fmtDollar(taxableQualified)}
+            ${fmtDollarFull(taxableQualified)}
             <span style="font-size:13px; color:var(--text-secondary); font-weight:normal; margin-left:6px">/ yr (${taxQualPct.toFixed(1)}% of taxable)</span>
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">
@@ -2314,7 +2331,7 @@
             <span class="type-badge" style="background:rgba(245,158,11,0.15);color:var(--accent-amber);font-size:11px;font-weight:600">Ordinary Rate (up to 37%+)</span>
           </div>
           <div class="hero-value" style="font-size:26px; color:var(--accent-amber); margin-top:0.4rem; text-align:left">
-            ${fmtDollar(taxableNonQualified)}
+            ${fmtDollarFull(taxableNonQualified)}
             <span style="font-size:13px; color:var(--text-secondary); font-weight:normal; margin-left:6px">/ yr (${taxNonQualPct.toFixed(1)}% of taxable)</span>
           </div>
           <div class="hero-sub" style="font-size:12px; margin-top:0.4rem; text-align:left">

@@ -27,12 +27,13 @@ def test_deduplicate():
         {"account_id": "1", "ticker": "AAPL", "security_id": "s2", "security_name": "Apple", "type_display": "Stock", "quantity": 100.0, "value": 15000.0, "cost_basis": 10000.0},
         {"account_id": "3", "ticker": "UNKNOWN_189993188208175994", "security_id": "UNKNOWN_189993188208175994", "security_name": "Vanguard 500", "type_display": "ETF", "quantity": 1.0, "value": 100.0, "cost_basis": 50.0},
         {"account_id": "4", "ticker": "VFFSX", "security_id": "s4", "security_name": "Vanguard 500", "type_display": "Mutual Fund", "quantity": 2.0, "value": 200.0, "cost_basis": 100.0},
+        {"account_id": "5", "ticker": float("nan"), "security_id": "s5", "security_name": "Inst Tot Bd Mkt Ix Tr", "type_display": "ETF", "quantity": 10.0, "value": 1000.0, "cost_basis": 900.0},
     ]
     df = pd.DataFrame(data)
     
     result = deduplicate(df)
     
-    assert len(result) == 3 # GOOG, AAPL, VFFSX
+    assert len(result) == 4 # GOOG, AAPL, VFFSX, VBTIX
     
     # Check aggregation of GOOG
     goog_row = result[result["ticker"] == "GOOG"].iloc[0]
@@ -44,6 +45,11 @@ def test_deduplicate():
     vffsx_row = result[result["ticker"] == "VFFSX"].iloc[0]
     assert vffsx_row["quantity"] == 3.0
     assert vffsx_row["value"] == 300.0
+
+    # Check NaN ticker mapped to VBTIX via name override
+    vbtix_row = result[result["ticker"] == "VBTIX"].iloc[0]
+    assert vbtix_row["quantity"] == 10.0
+    assert vbtix_row["value"] == 1000.0
 
 def test_normalize_asset_class():
     data = [
