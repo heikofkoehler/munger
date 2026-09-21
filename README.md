@@ -118,6 +118,7 @@ The sheet must have these columns:
 
 | Variable | Default | Description |
 |---|---|---|
+| `MUNGER_WORKSPACE` | `~/.munger/default` | Local-first workspace folder (settings, snapshots, caches) |
 | `MONARCH_JSON_PATH` | — | Path to stored Monarch response JSON (highest priority) |
 | `MONARCH_COOKIE` | — | Monarch session cookie string (used by `monarch.py` to fetch fresh data) |
 | `MONARCH_TOKEN` | — | Monarch API token (alternative auth for `monarch.py`) |
@@ -125,6 +126,23 @@ The sheet must have these columns:
 | `SHEET_ID` | — | Google Sheet ID (from URL) |
 | `GOOGLE_CREDENTIALS_PATH` | `credentials.json` | OAuth client secret file |
 | `CONC_THRESHOLD` | `10.0` | Flag any position exceeding this % of portfolio |
+
+### Workspace (local-first)
+
+Munger keeps everything it owns in a plain folder on disk — the workspace:
+
+```
+<workspace>/
+  settings.json      # non-secret config: data source, concentration threshold
+  snapshots/         # immutable timestamped portfolio snapshots (JSON)
+  cache/             # derived SQLite caches (safe to delete)
+```
+
+- Resolution: `MUNGER_WORKSPACE` env var → `~/.munger/default`.
+- Every successful data refresh writes an immutable snapshot to `snapshots/` — portfolio history you can diff, copy, or commit.
+- Browse them via the API (`GET /api/snapshots`, `GET /api/snapshots/{name}`) or `python cli.py --list-snapshots`.
+- Data-source precedence: explicit argument → `settings.json` → environment variable. Run `python cli.py --init` to create `settings.json` with defaults (never overwrites).
+- Secrets (Monarch cookie, OAuth tokens) are never written to `settings.json`; they stay in `.env` / environment variables.
 
 ## Testing
 

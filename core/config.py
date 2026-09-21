@@ -1,9 +1,21 @@
 import os
 
-def check_gitignore():
-    """Verify .gitignore exists and contains required security patterns."""
+from core.workspace import is_inside_repo, repo_root
+
+
+def check_gitignore(workspace=None):
+    """
+    Verify .gitignore exists and contains required security patterns.
+
+    Only enforced when the workspace lives inside the repository: with the
+    default workspace (~/.munger) there is nothing sensitive under git, so
+    the check is skipped.
+    """
+    if not is_inside_repo(workspace if workspace is not None else repo_root()):
+        return
+
     required = {"*.csv", "*.json", "*.env", "*.db"}
-    gitignore_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), ".gitignore")
+    gitignore_path = os.path.join(repo_root(), ".gitignore")
 
     if not os.path.exists(gitignore_path):
         raise RuntimeError(".gitignore not found — refusing to start. "

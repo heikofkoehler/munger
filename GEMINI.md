@@ -21,6 +21,10 @@ Primary data source is **Monarch Money** (GraphQL API via `monarch.py`); fallbac
 
 ```text
 monarch.py      — fetches Monarch GraphQL API, saves monarch_response.json
+core/workspace.py — workspace resolution: MUNGER_WORKSPACE env → ~/.munger/default
+core/settings.py  — <workspace>/settings.json (non-secret config; secrets stay in .env)
+core/snapshots.py — immutable timestamped JSON snapshots in <workspace>/snapshots/
+core/database.py  — yfinance SQLite cache at <workspace>/cache/market_data.db
 data/sources.py — load() dispatcher (JSON > CSV > Sheets)
 data/normalization.py — deduplicate() by security_id, normalize_asset_class()
 metrics/        — logic for risk, efficiency, portfolio, tax, valuation
@@ -29,11 +33,12 @@ main.py         — FastAPI app; lazy-cached endpoints:
                     /api/market   (~16s first call, yfinance)
                     /api/tax      (instant, pandas)
                     /api/efficiency (calculates wealth gap)
-                    /api/refresh  (clears derived caches)
+                    /api/refresh  (clears derived caches, writes snapshot)
+                    /api/snapshots[_/{name}] (workspace snapshot history)
 static/index.html — multi-panel dashboard
 ```
 
-**Data source priority**: `MONARCH_JSON_PATH` > `CSV_PATH` > `SHEET_ID`
+**Data source priority**: `MONARCH_JSON_PATH` > `CSV_PATH` > `SHEET_ID`, with per-source precedence: explicit argument > `settings.json` (`data_source`) > environment variable. `data_source.kind` (`auto` | `monarch_json` | `csv` | `sheets`) pins a single source.
 
 **Deduplication**: `security_id` is the primary key. Holdings of the same security across multiple accounts are merged; `quantity` and `value` (and `cost_basis` when present) are summed.
 
@@ -53,7 +58,7 @@ static/index.html — multi-panel dashboard
 ## Security Requirements
 1. **Zero Cloud**: No financial data should ever leave the local machine except for the initial fetch (Google Sheet or Monarch). Only ticker symbols leave the machine (yfinance market data fetch).
 2. **Secrets**: All secrets in `.env` — never committed.
-3. **Gitignore Enforced**: `.gitignore` enforced at startup: must contain `*.csv`, `*.json`, `*.env`, `*.db`.
+3. **Gitignore Enforced**: `.gitignore` enforced at startup when the workspace lives inside the repo: must contain `*.csv`, `*.json`, `*.env`, `*.db`. Skipped for the default workspace (`~/.munger`), which is outside git by construction.
 4. **No Telemetry**: Explicitly do not include any analytics libraries like Segment, Mixpanel, or Google Analytics.
 5. **Logging**: All logging must be stdout to the local console only.
 6. **Token Refreshment (Sheets)**: Instead of storing a persistent `service_account.json`, use the Authorization Code Flow. The app will prompt you to log in once via a browser, and then it will store a temporary `token.json` locally.

@@ -76,3 +76,27 @@ def test_load_from_sheets(mock_build, mock_creds_file, mock_exists):
     assert df.iloc[0]["cost_basis"] == 1200.0
     assert df.iloc[1]["value"] == 2500.0
     assert pd.isna(df.iloc[1]["cost_basis"])
+
+@patch("os.path.exists", return_value=True)
+@patch("data.sources.load_from_csv")
+def test_load_settings_csv_used_when_env_empty(mock_load_csv, mock_exists):
+    with patch("os.environ.get", return_value=None):
+        load(settings={"data_source": {"kind": "auto", "csv_path": "settings.csv"}})
+        mock_load_csv.assert_called_once_with("settings.csv")
+
+@patch("os.path.exists", return_value=True)
+@patch("data.sources.load_from_csv")
+def test_load_explicit_arg_beats_settings(mock_load_csv, mock_exists):
+    with patch("os.environ.get", return_value=None):
+        load(csv_path="explicit.csv",
+             settings={"data_source": {"kind": "auto", "csv_path": "settings.csv"}})
+        mock_load_csv.assert_called_once_with("explicit.csv")
+
+@patch("os.path.exists", return_value=True)
+@patch("data.sources.load_from_sheets")
+def test_load_kind_pin_skips_other_sources(mock_load_sheets, mock_exists):
+    with patch("os.environ.get", return_value=None):
+        load(settings={"data_source": {"kind": "sheets",
+                                       "csv_path": "ignored.csv",
+                                       "sheet_id": "s1"}})
+        mock_load_sheets.assert_called_once_with("s1")

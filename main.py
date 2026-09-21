@@ -6,6 +6,7 @@ Run with: uvicorn main:app --reload
 """
 
 import logging
+import os
 import traceback
 import pandas as pd
 from fastapi import FastAPI, Request
@@ -15,13 +16,25 @@ from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
 load_dotenv()
 
+# Local-first bootstrap: resolve the workspace and settings before any other
+# local imports, so import-time configuration (e.g. CONC_THRESHOLD in
+# metrics.risk) can honor <workspace>/settings.json.
+from core.workspace import ensure_workspace, cache_dir
+from core.settings import load_settings, init_settings
+
+WORKSPACE = ensure_workspace()
+SETTINGS = load_settings(WORKSPACE)
+init_settings(WORKSPACE)  # create with defaults on first run; never overwrites
+
+os.environ.setdefault("CONC_THRESHOLD", str(SETTINGS.get("concentration_threshold", 10.0)))
+
 from core.config import check_gitignore
 from data.sources import load
 from data.vanguard import download_voo_holdings
 from data.normalization import deduplicate, normalize_asset_class
 from data.market_data import enrich_with_market_data, get_fund_details, clear_market_cache
 from metrics.portfolio import calculate_metrics, calculate_institutions, calculate_sector_allocation
-from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot
+from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot, CONC_THRESHOLD
 from metrics.tax import calculate_tax_buckets
 from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
 
@@ -30,7 +43,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Fail immediately if .gitignore is missing required security patterns
-check_gitignore()
+# (skipped automatically when the workspace lives outside the repo)
+check_gitignore(WORKSPACE)
 
 app = FastAPI(title="Munger", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -47,6 +61,25 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"message": "Internal Server Error", "detail": str(exc)},
     )
 
+def _describe_source() -> str:
+    """Human-readable label for the currently configured data source."""
+    ds = SETTINGS.get("data_source", {})
+    kind = ds.get("kind", "auto")
+    if kind != "auto":
+        return kind
+    if ds.get("monarch_json_path") or os.environ.get("MONARCH_JSON_PATH"):
+        return "monarch_json"
+    if ds.get("csv_path") or os.environ.get("CSV_PATH"):
+        return "csv"
+    if ds.get("sheet_id") or os.environ.get("SHEET_ID"):
+        return "sheets"
+    return "default"
+
+
+def _risk_db_path() -> str:
+    return str(cache_dir(WORKSPACE) / "risk_history.db")
+
+
 def _build_cache(source_path: str = None) -> None:
     global _current_source
     try:
@@ -54,7 +87,7 @@ def _build_cache(source_path: str = None) -> None:
             _current_source = source_path
         
         logger.info(f"Building cache (source: {_current_source or 'default'})...")
-        df_raw = load(override_path=_current_source)
+        df_raw = load(override_path=_current_source, settings=SETTINGS)
         df = normalize_asset_class(deduplicate(df_raw))
         risk = calculate_risk_metrics(df)
         
@@ -66,14 +99,27 @@ def _build_cache(source_path: str = None) -> None:
             **calculate_metrics(df),
             "institutions": calculate_institutions(df_raw),
             "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
-            "risk_threshold": 10.0,
+            "risk_threshold": CONC_THRESHOLD,
             "active_portfolio": _current_source or "Default"
         }
         _cache["df_clean"] = df
         _cache["df_raw"] = df_raw
         _cache["risk"] = risk
         
-        save_risk_snapshot(risk)
+        save_risk_snapshot(risk, db_path=_risk_db_path())
+
+        if SETTINGS.get("snapshots", {}).get("enabled", True):
+            try:
+                from core.snapshots import write_snapshot
+                snap_path = write_snapshot(
+                    WORKSPACE,
+                    source_label=_current_source or _describe_source(),
+                    summary=_cache["summary"],
+                )
+                logger.info(f"Snapshot written: {snap_path.name}")
+            except Exception as e:
+                logger.warning(f"Snapshot write failed (non-fatal): {e}")
+
         logger.info("Cache built successfully.")
     except Exception as e:
         logger.error(f"Error building cache: {e}")
@@ -129,7 +175,7 @@ def risk():
     if "risk" not in _cache:
         r = calculate_risk_metrics(_cache["df_clean"])
         _cache["risk"] = r
-        save_risk_snapshot(r)
+        save_risk_snapshot(r, db_path=_risk_db_path())
     return _cache["risk"]
 
 
@@ -163,6 +209,23 @@ def valuation():
         _cache["valuation"] = calculate_valuation_metrics(_cache["summary"]["positions"])
     logger.info(f"API: valuation returning {len(_cache.get('valuation', []))} items")
     return _cache.get("valuation", [])
+
+
+@app.get("/api/snapshots")
+def snapshots():
+    """List portfolio snapshots (newest first) from the workspace."""
+    from core.snapshots import list_snapshots
+    return {"snapshots": list_snapshots(WORKSPACE)}
+
+
+@app.get("/api/snapshots/{name}")
+def snapshot_detail(name: str):
+    """Load a single snapshot by filename (e.g. 20260921T120000.json)."""
+    from core.snapshots import load_snapshot
+    try:
+        return load_snapshot(WORKSPACE, name)
+    except (ValueError, FileNotFoundError) as e:
+        return JSONResponse(status_code=404, content={"message": str(e)})
 
 
 @app.get("/api/refresh")
