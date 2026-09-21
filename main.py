@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 
 # Fail immediately if .gitignore is missing required security patterns
 # (skipped automatically when the workspace lives outside the repo)
-check_gitignore(WORKSPACE)
+check_gitignore()
 
 app = FastAPI(title="Munger", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory="static"), name="static")

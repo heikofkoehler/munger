@@ -58,7 +58,7 @@ static/index.html — multi-panel dashboard
 ## Security Requirements
 1. **Zero Cloud**: No financial data should ever leave the local machine except for the initial fetch (Google Sheet or Monarch). Only ticker symbols leave the machine (yfinance market data fetch).
 2. **Secrets**: All secrets in `.env` — never committed.
-3. **Gitignore Enforced**: `.gitignore` enforced at startup when the workspace lives inside the repo: must contain `*.csv`, `*.json`, `*.env`, `*.db`. Skipped for the default workspace (`~/.munger`), which is outside git by construction.
+3. **Gitignore Enforced**: `.gitignore` enforced at startup when running from a source checkout: must contain `*.csv`, `*.json`, `*.env`, `*.db`. Skipped for installed-app layouts (no `.git` directory) so a future desktop bundle doesn't crash on a missing `.gitignore`.
 4. **No Telemetry**: Explicitly do not include any analytics libraries like Segment, Mixpanel, or Google Analytics.
 5. **Logging**: All logging must be stdout to the local console only.
 6. **Token Refreshment (Sheets)**: Instead of storing a persistent `service_account.json`, use the Authorization Code Flow. The app will prompt you to log in once via a browser, and then it will store a temporary `token.json` locally.

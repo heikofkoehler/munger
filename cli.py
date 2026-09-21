@@ -66,7 +66,7 @@ def main():
         print(f"Workspace: {WORKSPACE}")
         return
 
-    check_gitignore(WORKSPACE)
+    check_gitignore()
 
     if args.list_snapshots:
         _print_snapshots()

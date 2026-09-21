@@ -1,25 +1,26 @@
 import os
 
-from core.workspace import is_inside_repo, repo_root
+from core.workspace import repo_root
 
 
-def check_gitignore(workspace=None):
+def check_gitignore():
     """
     Verify .gitignore exists and contains required security patterns.
 
-    Only enforced when the workspace lives inside the repository: with the
-    default workspace (~/.munger) there is nothing sensitive under git, so
-    the check is skipped.
+    When running from a source checkout the check is enforced: secrets and
+    data files (.env, *.csv, *.json, *.db) must not be committable. When
+    running as an installed app (no .git directory, e.g. a future Tauri
+    bundle), there is no git checkout to protect, so the check is skipped
+    instead of crashing the app.
     """
-    if not is_inside_repo(workspace if workspace is not None else repo_root()):
-        return
-
-    required = {"*.csv", "*.json", "*.env", "*.db"}
     gitignore_path = os.path.join(repo_root(), ".gitignore")
+    required = {"*.csv", "*.json", "*.env", "*.db"}
 
     if not os.path.exists(gitignore_path):
-        raise RuntimeError(".gitignore not found — refusing to start. "
-                           "Create .gitignore with: *.csv, *.json, *.env, *.db")
+        if os.path.isdir(os.path.join(repo_root(), ".git")):
+            raise RuntimeError(".gitignore not found — refusing to start. "
+                               "Create .gitignore with: *.csv, *.json, *.env, *.db")
+        return
 
     with open(gitignore_path) as f:
         lines = {line.strip() for line in f if line.strip() and not line.startswith("#")}
