@@ -7,7 +7,9 @@ Run with: uvicorn main:app --reload
 
 import logging
 import os
+import sys
 import traceback
+from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
@@ -28,6 +30,20 @@ init_settings(WORKSPACE)  # create with defaults on first run; never overwrites
 
 os.environ.setdefault("CONC_THRESHOLD", str(SETTINGS.get("concentration_threshold", 10.0)))
 
+
+def _base_dir() -> Path:
+    """
+    Base directory for bundled resources: the PyInstaller bundle dir when
+    frozen (Tauri sidecar), otherwise the repo root. The sidecar has no
+    reliable CWD, so the static frontend must not be resolved relatively.
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        return Path(sys._MEIPASS)
+    return Path(__file__).resolve().parent
+
+
+BASE_DIR = _base_dir()
+
 from core.config import check_gitignore
 from data.sources import load
 from data.vanguard import download_voo_holdings
@@ -47,7 +63,7 @@ logger = logging.getLogger(__name__)
 check_gitignore()
 
 app = FastAPI(title="Munger", docs_url=None, redoc_url=None)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 _cache: dict = {}
 _current_source: str = None
@@ -132,7 +148,7 @@ _build_cache()
 
 @app.get("/", include_in_schema=False)
 def root():
-    return FileResponse("static/index.html", headers={"Cache-Control": "no-store"})
+    return FileResponse(str(BASE_DIR / "static" / "index.html"), headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/portfolios")

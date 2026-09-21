@@ -12,3 +12,10 @@ __pycache__/
 venv/
 *.log
 .DS_Store
+# Tauri desktop shell
+src-tauri/target/
+src-tauri/binaries/munger-backend*
+src-tauri/gen/
+# Tauri configs must be committed (narrow exceptions to the *.json rule above)
+!src-tauri/tauri.conf.json
+!src-tauri/capabilities/*.json

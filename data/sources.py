@@ -12,12 +12,26 @@ def load_from_csv(path: str):
     df = pd.read_csv(path)
     return df
 
+def _user_file(name: str) -> str:
+    """
+    Resolve a user-managed file (OAuth credentials / token): prefer the
+    historical CWD location so existing setups keep working; fall back to the
+    workspace root so the desktop app (which has no reliable CWD) has a
+    stable home for it. Absolute paths are returned unchanged.
+    """
+    if os.path.isabs(name) or os.path.exists(name):
+        return name
+    from core.workspace import resolve_workspace
+    return str(resolve_workspace() / name)
+
+
 def load_from_sheets(sheet_id: str):
     """
     Load holdings from Google Sheets via OAuth2 Authorization Code Flow.
 
     Credentials JSON path is read from GOOGLE_CREDENTIALS_PATH env var
     (default: credentials.json). Token is stored/refreshed in token.json.
+    Relative paths resolve to CWD first, then the workspace root.
     """
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -25,8 +39,8 @@ def load_from_sheets(sheet_id: str):
     from googleapiclient.discovery import build
 
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-    token_path = "token.json"
+    creds_path = _user_file(os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json"))
+    token_path = _user_file("token.json")
 
     creds = None
     if os.path.exists(token_path):

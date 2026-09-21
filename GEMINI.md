@@ -16,6 +16,7 @@ Primary data source is **Monarch Money** (GraphQL API via `monarch.py`); fallbac
 - **Google Sheets integration**: OAuth2 Authorization Code Flow (`google-auth-oauthlib`), no service accounts.
 - **Market data**: `yfinance` — dividend yield/rate, EPS, P/E, sector, market cap (ticker symbols only leave the machine).
 - **Frontend**: Vanilla JS + CSS, no framework, served as a single `static/index.html`.
+- **Desktop shell**: Tauri v2 (`src-tauri/`) — spawns the Python backend as a sidecar binary (`sidecar.py` → PyInstaller, see `scripts/build-sidecar.sh`), reads its announced loopback port, opens the main window on it. No Rust analytics rewrite; Python remains the single engine.
 
 ## Data Environment & Architecture
 

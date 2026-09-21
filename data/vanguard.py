@@ -2,13 +2,23 @@ import os
 import sys
 import pandas as pd
 
-def download_voo_holdings(output_path="vanguard_voo_holdings.csv"):
+from core.workspace import cache_path
+
+
+def download_voo_holdings(output_path: str = None):
     """
     Downloads S&P 500 holdings to represent VOO.
     Vanguard aggressively blocks automated scripts (Cloudflare/SSL fingerprinting).
     Instead, we fetch the identical S&P 500 composition from State Street's SPY,
     which provides a reliable public Excel file, and save it as our VOO CSV.
+
+    Defaults to <workspace>/cache/vanguard_voo_holdings.csv so the desktop app
+    (no reliable CWD) shares the same derived cache as the CLI.
     """
+    if output_path is None:
+        output_path = str(cache_path("vanguard_voo_holdings.csv"))
+    output_path = os.path.expanduser(output_path)
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     print("Downloading VOO (S&P 500) holdings...", flush=True)
     try:
         # SPY Holdings Excel (reliable public link)

@@ -67,3 +67,20 @@ def is_inside_repo(ws: "str | Path") -> bool:
         return Path(ws).resolve().is_relative_to(repo_root().resolve())
     except (OSError, RuntimeError):
         return False
+
+
+def cache_path(name: str) -> Path:
+    """Preferred location for a derived cache file (inside the workspace)."""
+    return cache_dir(resolve_workspace()) / name
+
+
+def resolve_cached_file(name: str) -> Path:
+    """
+    Locate an existing derived-cache file: the workspace copy wins, else the
+    legacy CWD copy, else the workspace path (so writers create it there).
+    """
+    preferred = cache_path(name)
+    legacy = Path(name)
+    if preferred.exists() or not legacy.exists():
+        return preferred
+    return legacy

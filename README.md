@@ -144,6 +144,23 @@ Munger keeps everything it owns in a plain folder on disk — the workspace:
 - Data-source precedence: explicit argument → `settings.json` → environment variable. Run `python cli.py --init` to create `settings.json` with defaults (never overwrites).
 - Secrets (Monarch cookie, OAuth tokens) are never written to `settings.json`; they stay in `.env` / environment variables.
 
+## Desktop app (Tauri)
+
+The local-first desktop shell wraps the exact same Python backend — no analytics rewrite. The Tauri shell (`src-tauri/`) spawns the backend as a sidecar binary, reads the loopback port it announces on stdout (`MUNGER_PORT=<port>`), and opens the main window on it. The backend serves both the API and the existing `static/index.html` frontend, so the desktop app is pixel-identical to the browser version.
+
+```bash
+# one-time: Rust toolchain + Tauri CLI (https://v2.tauri.app/start/prerequisites/)
+scripts/build-sidecar.sh   # PyInstaller -> src-tauri/binaries/munger-backend-<triple>
+tauri dev                    # or: tauri build   (produces the .dmg/.app)
+```
+
+- `sidecar.py` is the PyInstaller entrypoint: picks a free `127.0.0.1` port, prints `MUNGER_PORT=<port>`, runs uvicorn. `python sidecar.py` also works for debugging the protocol without Tauri.
+- `src-tauri/src/main.rs` owns the sidecar lifecycle: spawn → wait for port → open window; killing the sidecar when the window closes.
+- The workspace (`~/.munger/default`, or `MUNGER_WORKSPACE`) is shared with the CLI — snapshots and caches carry over.
+- OAuth files (`credentials.json`, `token.json`): the repo copy still wins when present; otherwise they resolve to the workspace root.
+- `scripts/generate-icons.sh` regenerates the full platform icon set from `src-tauri/icons/icon.png` via the Tauri CLI.
+- `.dmg` packaging must be built and smoke-tested on a Mac; the Linux scaffold here covers everything up to `tauri build`.
+
 ## Testing
 
 The codebase is decomposed into independent modules (`core/`, `data/`, `metrics/`) which are tested via `pytest`.

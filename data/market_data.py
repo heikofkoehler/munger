@@ -31,7 +31,9 @@ def get_fund_details(ticker: str) -> dict:
     expense_ratio = DEFAULT_FUND_EXPENSE_RATIOS.get(ticker)
 
     # 1. Check local CSV override for S&P 500 index funds first (guaranteed look-through)
-    csv_path = "vanguard_voo_holdings.csv"
+    #    Workspace cache wins; legacy ./vanguard_voo_holdings.csv still honored.
+    from core.workspace import resolve_cached_file
+    csv_path = str(resolve_cached_file("vanguard_voo_holdings.csv"))
     if ticker in ["VOO", "VFFSX", "SPY", "IVV"] and os.path.exists(csv_path):
         try:
             df_csv = pd.read_csv(csv_path)
