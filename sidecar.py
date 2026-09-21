@@ -33,8 +33,12 @@ def main() -> None:
     except ImportError:
         pass
 
+    # Import the app object directly (not "main:app") so PyInstaller's
+    # static analysis bundles main.py and its core/data/metrics packages.
+    # A string import would fail at runtime in the frozen binary.
+    from main import app
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=port, log_level="warning")
+    uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
 
 
 if __name__ == "__main__":
