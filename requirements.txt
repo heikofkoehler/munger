@@ -8,3 +8,4 @@ tabulate
 fastapi
 uvicorn[standard]
 yfinance
+httpx  # test-only: FastAPI TestClient

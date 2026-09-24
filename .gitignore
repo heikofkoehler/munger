@@ -1,4 +1,6 @@
 *.csv
+# Test fixtures are synthetic and safe to commit
+!tests/fixtures/*.csv
 *.env
 .env
 *.db

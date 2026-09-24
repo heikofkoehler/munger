@@ -1,0 +1,4 @@
+account_id,account_name,account_mask,institution_name,holding_name,ticker,type_display,quantity,value,cost_basis,security_id,security_name,price_updated
+1,Mock Taxable Brokerage,1234,Mock Bank A,Apple Inc.,AAPL,Stock,150.0,22500.0,15000.0,sec_aapl,Apple Inc.,2026-03-15
+1,Mock Taxable Brokerage,1234,Mock Bank A,Microsoft Corporation,MSFT,Stock,50.0,20000.0,18000.0,sec_msft,Microsoft Corporation,2026-03-15
+2,Mock Roth IRA,5678,Mock Bank B,Alphabet Inc.,GOOG,Stock,1000.0,165000.0,100000.0,sec_goog,Alphabet Inc.,2026-03-15
