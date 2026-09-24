@@ -9,3 +9,4 @@ fastapi
 uvicorn[standard]
 yfinance
 httpx  # test-only: FastAPI TestClient
+playwright  # test-only: UI tests (tests/test_ui.py)
