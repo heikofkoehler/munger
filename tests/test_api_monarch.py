@@ -69,3 +69,33 @@ def test_monarch_sync_no_credentials(client):
         data = r.json()
         assert data["success"] is False
         assert data["needs_login"] is True
+
+
+def test_monarch_import_chrome_success(client):
+    fake_cookie = "session_id=fake123; csrftoken=fake456"
+    fake_sync_data = {
+        "data": {
+            "portfolio": {
+                "performance": {"totalValue": 550000.0, "totalChangeDollars": 1200.0}
+            }
+        }
+    }
+    with patch("main.extract_chrome_monarch_cookies", return_value=fake_cookie), \
+         patch("main._perform_monarch_sync", return_value=fake_sync_data), \
+         patch("main.persist_env_var") as mock_persist:
+        r = client.post("/api/monarch/import-chrome")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["total_value"] == 550000.0
+        mock_persist.assert_called_once_with("MONARCH_COOKIE", fake_cookie)
+
+
+def test_monarch_import_chrome_failure(client):
+    with patch("main.extract_chrome_monarch_cookies", side_effect=ValueError("No active cookies")):
+        r = client.post("/api/monarch/import-chrome")
+        assert r.status_code == 400
+        data = r.json()
+        assert data["success"] is False
+        assert "No active cookies" in data["error"]
+

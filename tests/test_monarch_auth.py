@@ -85,3 +85,60 @@ def test_monarch_browser_auth_state():
     # Test cancel when idle
     res = auth.cancel()
     assert res["status"] == "idle"
+
+
+def test_extract_chrome_monarch_cookies_mocked(tmp_path, monkeypatch):
+    import sqlite3
+    import hashlib
+    import subprocess
+    from unittest.mock import MagicMock
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.backends import default_backend
+    from core.monarch_auth import extract_chrome_monarch_cookies
+
+    # Mock home path
+    fake_home = tmp_path / "home"
+    chrome_dir = fake_home / "Library" / "Application Support" / "Google" / "Chrome" / "Default"
+    chrome_dir.mkdir(parents=True)
+    cookie_db = chrome_dir / "Cookies"
+
+    # Setup encrypted cookies in SQLite
+    test_password = "dummy-keychain-pass"
+    salt = b"saltysalt"
+    iv = b" " * 16
+    key = hashlib.pbkdf2_hmac("sha1", test_password.encode("utf-8"), salt, 1003, 16)
+
+    def encrypt_val(val_str: str) -> bytes:
+        data = val_str.encode("utf-8")
+        pad_len = 16 - (len(data) % 16)
+        padded = data + bytes([pad_len] * pad_len)
+        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+        enc = cipher.encryptor()
+        return b"v10" + enc.update(padded) + enc.finalize()
+
+    conn = sqlite3.connect(cookie_db)
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE cookies (host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB)")
+    cursor.execute(
+        "INSERT INTO cookies VALUES (?, ?, ?, ?)",
+        (".monarchmoney.com", "session_id", "", encrypt_val("sess_xyz123")),
+    )
+    cursor.execute(
+        "INSERT INTO cookies VALUES (?, ?, ?, ?)",
+        (".monarchmoney.com", "csrftoken", "", encrypt_val("csrf_abc456")),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr(Path, "home", lambda: fake_home)
+    monkeypatch.setattr("sys.platform", "darwin")
+
+    def fake_subprocess_run(cmd, *args, **kwargs):
+        return MagicMock(returncode=0, stdout=test_password, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    cookie_str = extract_chrome_monarch_cookies()
+    assert "session_id=sess_xyz123" in cookie_str
+    assert "csrftoken=csrf_abc456" in cookie_str
+

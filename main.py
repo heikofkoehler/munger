@@ -53,8 +53,12 @@ from metrics.portfolio import calculate_metrics, calculate_institutions, calcula
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot, CONC_THRESHOLD
 from metrics.tax import calculate_tax_buckets
 from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
-import monarch
-from core.monarch_auth import get_monarch_status, persist_env_var, browser_auth
+from core.monarch_auth import (
+    get_monarch_status,
+    persist_env_var,
+    browser_auth,
+    extract_chrome_monarch_cookies,
+)
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO)
@@ -350,6 +354,28 @@ def monarch_login_status():
 @app.post("/api/monarch/login-cancel")
 def monarch_login_cancel():
     return browser_auth.cancel()
+
+
+@app.post("/api/monarch/import-chrome")
+def monarch_import_chrome():
+    try:
+        cookie_str = extract_chrome_monarch_cookies()
+        persist_env_var("MONARCH_COOKIE", cookie_str)
+        data = _perform_monarch_sync(cookie=cookie_str)
+        perf = data.get("data", {}).get("portfolio", {}).get("performance", {})
+        return {
+            "success": True,
+            "message": "Monarch session imported from Chrome and synced successfully!",
+            "total_value": perf.get("totalValue"),
+            "summary": _cache.get("summary") or {},
+            "status": get_monarch_status(_get_monarch_json_path()),
+        }
+    except Exception as e:
+        logger.error(f"Failed to import Monarch session from Chrome: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": f"Failed to import session from Chrome: {str(e)}"},
+        )
 
 
 @app.post("/api/monarch/credentials")

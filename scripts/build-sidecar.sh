@@ -36,6 +36,8 @@ mkdir -p "$OUT"
   --hidden-import uvicorn.logging \
   --hidden-import uvicorn.loops.auto \
   --hidden-import uvicorn.protocols.http.auto \
+  --hidden-import cryptography \
+  --hidden-import cryptography.hazmat.backends.openssl \
   sidecar.py
 
 echo "built $OUT/munger-backend-$TRIPLE"

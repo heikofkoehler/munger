@@ -138,6 +138,124 @@ def get_monarch_status(response_path: str = "monarch_response.json") -> dict:
     return status
 
 
+def extract_chrome_monarch_cookies(profile_name: Optional[str] = None) -> str:
+    """
+    Extracts Monarch cookies (session_id and csrftoken) from the user's installed
+    macOS Google Chrome profile using the macOS Keychain and SQLite.
+    """
+    import shutil
+    import sqlite3
+    import subprocess
+    import tempfile
+    import sys
+
+    if sys.platform != "darwin":
+        raise NotImplementedError("Direct Chrome cookie extraction is currently supported on macOS.")
+
+    chrome_root = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
+    if not chrome_root.exists():
+        raise FileNotFoundError(f"Chrome directory not found at {chrome_root}")
+
+    # Determine candidate profile directories to search
+    if profile_name:
+        candidate_profiles = [profile_name]
+    else:
+        discovered = [p.name for p in sorted(chrome_root.glob("Profile *")) if p.is_dir()]
+        candidate_profiles = ["Default"] + discovered
+
+    # Query keychain for 'Chrome Safe Storage'
+    cmd = [
+        "security",
+        "find-generic-password",
+        "-w",
+        "-s",
+        "Chrome Safe Storage",
+        "-a",
+        "Chrome",
+    ]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
+    except subprocess.TimeoutExpired:
+        raise TimeoutError(
+            "Keychain access timed out waiting for approval. Please click Allow when macOS prompts for Chrome Safe Storage."
+        )
+
+    if res.returncode != 0:
+        raise PermissionError(
+            f"Keychain access was denied or failed: {res.stderr.strip() or 'User cancelled prompt'}"
+        )
+
+    password = res.stdout.strip()
+    if not password:
+        raise ValueError("Empty password retrieved from Keychain for Chrome Safe Storage.")
+
+    import hashlib
+    from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+    from cryptography.hazmat.backends import default_backend
+
+    salt = b"saltysalt"
+    iv = b" " * 16
+    key = hashlib.pbkdf2_hmac("sha1", password.encode("utf-8"), salt, 1003, 16)
+
+    last_error = None
+    for prof in candidate_profiles:
+        prof_dir = chrome_root / prof
+        if not prof_dir.is_dir():
+            continue
+
+        cookie_paths = [
+            prof_dir / "Cookies",
+            prof_dir / "Network" / "Cookies",
+        ]
+        cookie_file = next((cp for cp in cookie_paths if cp.exists()), None)
+        if not cookie_file:
+            continue
+
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tf:
+            temp_db = tf.name
+
+        try:
+            shutil.copy2(cookie_file, temp_db)
+            conn = sqlite3.connect(temp_db)
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT name, value, encrypted_value FROM cookies WHERE host_key LIKE '%monarch%'"
+            )
+            rows = cursor.fetchall()
+            conn.close()
+
+            if not rows:
+                continue
+
+            cookies = {}
+            for name, val, enc_val in rows:
+                if val:
+                    cookies[name] = val
+                elif enc_val:
+                    if enc_val[:3] == b"v10":
+                        cipher = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+                        decryptor = cipher.decryptor()
+                        decrypted = decryptor.update(enc_val[3:]) + decryptor.finalize()
+                        padding_len = decrypted[-1]
+                        if padding_len <= 16:
+                            decrypted = decrypted[:-padding_len]
+                        cookies[name] = decrypted.decode("utf-8", errors="ignore")
+
+            if "session_id" in cookies and "csrftoken" in cookies:
+                cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+                logger.info(f"Successfully extracted Monarch session cookies from Chrome profile '{prof}'.")
+                return cookie_str
+            else:
+                last_error = f"Found cookies in profile '{prof}' ({list(cookies.keys())}), but missing active session_id or csrftoken."
+        finally:
+            if os.path.exists(temp_db):
+                os.remove(temp_db)
+
+    if last_error:
+        raise ValueError(f"{last_error} Please ensure you are logged into monarchmoney.com in Chrome.")
+    raise ValueError("No active Monarch cookies found in Chrome. Please log into Monarch in Chrome first.")
+
+
 class MonarchBrowserAuth:
     """Manages an interactive Chrome login session via Playwright."""
 
@@ -222,25 +340,45 @@ class MonarchBrowserAuth:
 
         try:
             with sync_playwright() as p:
-                browser = None
-                # Try launching real installed Chrome with automation flags disabled (allows Google SSO)
+                profile_dir = Path.home() / ".munger" / "browser_profile"
+                profile_dir.mkdir(parents=True, exist_ok=True)
+
+                context = None
                 launch_errors = []
                 for launch_kwargs in [
-                    {"channel": "chrome", "headless": False, "args": ["--disable-blink-features=AutomationControlled"]},
-                    {"headless": False, "args": ["--disable-blink-features=AutomationControlled"]},
+                    {
+                        "user_data_dir": str(profile_dir),
+                        "channel": "chrome",
+                        "headless": False,
+                        "args": [
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                        ],
+                        "ignore_default_args": ["--enable-automation"],
+                    },
+                    {
+                        "user_data_dir": str(profile_dir),
+                        "headless": False,
+                        "args": [
+                            "--disable-blink-features=AutomationControlled",
+                            "--no-first-run",
+                            "--no-default-browser-check",
+                        ],
+                        "ignore_default_args": ["--enable-automation"],
+                    },
                 ]:
                     try:
-                        browser = p.chromium.launch(**launch_kwargs)
+                        context = p.chromium.launch_persistent_context(**launch_kwargs)
                         break
                     except Exception as le:
                         launch_errors.append(str(le))
 
-                if not browser:
+                if not context:
                     raise RuntimeError(f"Could not launch browser: {'; '.join(launch_errors)}")
 
-                self._browser = browser
-                context = browser.new_context()
-                page = context.new_page()
+                self._browser = context
+                page = context.pages[0] if context.pages else context.new_page()
 
                 with self._lock:
                     self._state["message"] = "Chrome is open. Navigating to Monarch login..."
@@ -249,7 +387,7 @@ class MonarchBrowserAuth:
 
                 with self._lock:
                     self._state["message"] = (
-                        "Monarch login page ready. Please log in using 'Continue with Google' or your Email/Password."
+                        "Monarch login page ready. Log in once; your session will be saved permanently."
                     )
 
                 start_time = time.time()
