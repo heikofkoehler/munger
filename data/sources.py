@@ -12,12 +12,26 @@ def load_from_csv(path: str):
     df = pd.read_csv(path)
     return df
 
+def _user_file(name: str) -> str:
+    """
+    Resolve a user-managed file (OAuth credentials / token): prefer the
+    historical CWD location so existing setups keep working; fall back to the
+    workspace root so the desktop app (which has no reliable CWD) has a
+    stable home for it. Absolute paths are returned unchanged.
+    """
+    if os.path.isabs(name) or os.path.exists(name):
+        return name
+    from core.workspace import resolve_workspace
+    return str(resolve_workspace() / name)
+
+
 def load_from_sheets(sheet_id: str):
     """
     Load holdings from Google Sheets via OAuth2 Authorization Code Flow.
 
     Credentials JSON path is read from GOOGLE_CREDENTIALS_PATH env var
     (default: credentials.json). Token is stored/refreshed in token.json.
+    Relative paths resolve to CWD first, then the workspace root.
     """
     from google.oauth2.credentials import Credentials
     from google_auth_oauthlib.flow import InstalledAppFlow
@@ -25,8 +39,8 @@ def load_from_sheets(sheet_id: str):
     from googleapiclient.discovery import build
 
     SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds_path = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
-    token_path = "token.json"
+    creds_path = _user_file(os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json"))
+    token_path = _user_file("token.json")
 
     creds = None
     if os.path.exists(token_path):
@@ -76,9 +90,14 @@ def load_from_sheets(sheet_id: str):
 
     return df
 
-def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, override_path: str = None):
+def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, override_path: str = None, settings: dict = None):
     """
     Dispatcher: load from Monarch JSON, CSV, or Google Sheets (checked in that order).
+
+    Precedence for each source: explicit argument > settings.json ("data_source")
+    > environment variable. settings["data_source"]["kind"] may be "auto"
+    (default), "monarch_json", "csv", or "sheets" to pin a single source.
+
     If override_path is provided, it attempts to load that file based on its extension.
     """
     if override_path and os.path.exists(override_path):
@@ -90,21 +109,28 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, o
             print(f"Loading from override CSV: {override_path}", flush=True)
             return load_from_csv(override_path)
 
-    monarch_json = monarch_json or os.environ.get("MONARCH_JSON_PATH")
-    csv_path = csv_path or os.environ.get("CSV_PATH")
-    sheet_id = sheet_id or os.environ.get("SHEET_ID")
+    ds = (settings or {}).get("data_source", {}) or {}
+    kind = ds.get("kind", "auto")
 
-    if monarch_json and os.path.exists(monarch_json):
+    monarch_json = monarch_json or ds.get("monarch_json_path") or os.environ.get("MONARCH_JSON_PATH")
+    csv_path = csv_path or ds.get("csv_path") or os.environ.get("CSV_PATH")
+    sheet_id = sheet_id or ds.get("sheet_id") or os.environ.get("SHEET_ID")
+
+    def _want(name: str) -> bool:
+        return kind == "auto" or kind == name
+
+    if _want("monarch_json") and monarch_json and os.path.exists(monarch_json):
         print(f"Loading from Monarch JSON: {monarch_json}", flush=True)
         from monarch import load_from_json
         return load_from_json(monarch_json)
-    if csv_path and os.path.exists(csv_path):
+    if _want("csv") and csv_path and os.path.exists(csv_path):
         print(f"Loading from CSV: {csv_path}", flush=True)
         return load_from_csv(csv_path)
-    if sheet_id:
+    if _want("sheets") and sheet_id:
         print(f"Loading from Google Sheets: {sheet_id}", flush=True)
         return load_from_sheets(sheet_id)
 
     raise ValueError(
-        "No data source configured or found. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID and ensure the local files exist."
+        "No data source configured or found. Set MONARCH_JSON_PATH, CSV_PATH, or SHEET_ID "
+        "(or configure data_source in <workspace>/settings.json) and ensure the local files exist."
     )
