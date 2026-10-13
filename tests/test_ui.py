@@ -105,7 +105,7 @@ def page(server):
 
 def test_dashboard_loads_summary(page, server):
     page.goto(server)
-    page.wait_for_selector("#loading.hidden", timeout=15000)
+    page.wait_for_selector("#loading.hidden", state="attached", timeout=15000)
     total = page.locator("#total-value").inner_text()
     assert total.strip(), "total value did not render"
     assert "$" in total
@@ -113,7 +113,7 @@ def test_dashboard_loads_summary(page, server):
 
 def test_tab_switching(page, server):
     page.goto(server)
-    page.wait_for_selector("#loading.hidden", timeout=15000)
+    page.wait_for_selector("#loading.hidden", state="attached", timeout=15000)
     for tab in ("risk", "efficiency", "valuation", "dividends", "earnings", "accounts"):
         page.click(f"button[onclick=\"switchTab('{tab}')\"]")
         cls = page.locator(f"#panel-{tab}").get_attribute("class")
