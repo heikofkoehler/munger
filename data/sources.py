@@ -100,7 +100,9 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, o
 
     If override_path is provided, it attempts to load that file based on its extension.
     """
-    if override_path and os.path.exists(override_path):
+    if override_path:
+        if not os.path.exists(override_path):
+            raise FileNotFoundError(f"Portfolio file not found: {override_path}")
         if override_path.endswith(".json"):
             print(f"Loading from override JSON: {override_path}", flush=True)
             from monarch import load_from_json

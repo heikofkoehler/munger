@@ -53,6 +53,8 @@ from metrics.portfolio import calculate_metrics, calculate_institutions, calcula
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot, CONC_THRESHOLD
 from metrics.tax import calculate_tax_buckets
 from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
+import monarch
+from core.monarch_auth import get_monarch_status, persist_env_var, browser_auth
 
 # Initialize Logging
 logging.basicConfig(level=logging.INFO)
@@ -251,6 +253,142 @@ def refresh():
     clear_market_cache()
     _build_cache(source_path=_current_source)
     return _cache.get("summary") or {}
+
+
+def _get_monarch_json_path() -> str:
+    ds = SETTINGS.get("data_source", {})
+    return ds.get("monarch_json_path") or os.environ.get("MONARCH_JSON_PATH", "monarch_response.json")
+
+
+def _get_csv_path() -> str:
+    ds = SETTINGS.get("data_source", {})
+    return ds.get("csv_path") or os.environ.get("CSV_PATH", "portfolio_holdings.csv")
+
+
+def _perform_monarch_sync(cookie: str = None, token: str = None) -> dict:
+    json_path = _get_monarch_json_path()
+    csv_path = _get_csv_path()
+    cookie = cookie or os.environ.get("MONARCH_COOKIE")
+    token = token or os.environ.get("MONARCH_TOKEN") if not cookie else None
+    if not cookie and not token:
+        raise ValueError("No Monarch credentials found. Please log in or provide credentials.")
+
+    data = monarch.fetch(cookie=cookie, token=token, output_path=json_path)
+    df = monarch.to_dataframe(data)
+    try:
+        df.to_csv(csv_path, index=False)
+    except Exception as e:
+        logger.warning(f"Could not save CSV copy: {e}")
+
+    clear_valuation_cache()
+    clear_market_cache()
+    _build_cache(source_path=json_path)
+    return data
+
+
+@app.get("/api/monarch/status")
+def monarch_status():
+    status = get_monarch_status(_get_monarch_json_path())
+    status["login_process"] = browser_auth.get_status()
+    return status
+
+
+@app.post("/api/monarch/sync")
+def monarch_sync():
+    cookie = os.environ.get("MONARCH_COOKIE")
+    token = os.environ.get("MONARCH_TOKEN") if not cookie else None
+    if not cookie and not token:
+        return JSONResponse(
+            status_code=401,
+            content={
+                "success": False,
+                "needs_login": True,
+                "error": "No Monarch credentials configured. Please log in.",
+            },
+        )
+    try:
+        data = _perform_monarch_sync(cookie=cookie, token=token)
+        perf = data.get("data", {}).get("portfolio", {}).get("performance", {})
+        return {
+            "success": True,
+            "message": "Monarch portfolio synced successfully.",
+            "total_value": perf.get("totalValue"),
+            "total_change": perf.get("totalChangeDollars"),
+            "summary": _cache.get("summary") or {},
+            "status": get_monarch_status(_get_monarch_json_path()),
+        }
+    except Exception as e:
+        logger.error(f"Monarch sync failed: {e}", exc_info=True)
+        is_auth_error = any(kw in str(e) for kw in ["401", "403", "Forbidden", "Unauthorized", "GraphQL errors"])
+        return JSONResponse(
+            status_code=401 if is_auth_error else 500,
+            content={
+                "success": False,
+                "needs_login": is_auth_error,
+                "error": f"Monarch sync failed: {str(e)}",
+            },
+        )
+
+
+@app.post("/api/monarch/login-browser")
+def monarch_login_browser():
+    def on_success(cookie_str: str):
+        _perform_monarch_sync(cookie=cookie_str)
+
+    res = browser_auth.start(on_success_callback=on_success)
+    return res
+
+
+@app.get("/api/monarch/login-status")
+def monarch_login_status():
+    status = browser_auth.get_status()
+    if status.get("status") == "success":
+        status["summary"] = _cache.get("summary") or {}
+    return status
+
+
+@app.post("/api/monarch/login-cancel")
+def monarch_login_cancel():
+    return browser_auth.cancel()
+
+
+@app.post("/api/monarch/credentials")
+async def monarch_save_credentials(request: Request):
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"success": False, "error": "Invalid JSON body"})
+
+    cookie = body.get("cookie", "").strip()
+    token = body.get("token", "").strip()
+
+    if not cookie and not token:
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": "Please provide either a cookie string or an API token."},
+        )
+
+    try:
+        data = _perform_monarch_sync(cookie=cookie or None, token=token or None)
+        if cookie:
+            persist_env_var("MONARCH_COOKIE", cookie)
+        elif token:
+            persist_env_var("MONARCH_TOKEN", token)
+
+        perf = data.get("data", {}).get("portfolio", {}).get("performance", {})
+        return {
+            "success": True,
+            "message": "Credentials verified and portfolio synced successfully.",
+            "total_value": perf.get("totalValue"),
+            "summary": _cache.get("summary") or {},
+            "status": get_monarch_status(_get_monarch_json_path()),
+        }
+    except Exception as e:
+        logger.error(f"Credentials validation failed: {e}", exc_info=True)
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "error": f"Failed to authenticate with Monarch: {str(e)}"},
+        )
 
 
 @app.get("/api/ticker/{symbol}")
