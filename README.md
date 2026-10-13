@@ -6,6 +6,7 @@ A local-first, high-security portfolio analysis dashboard. Reads holdings from M
 
 ## Features
 
+- **In-App Monarch Money Sync & Browser Login** — authenticate directly in the UI with Google SSO ("Continue with Google") or email/password; automated session cookie capture and one-click live portfolio syncing (no CLI or DevTools copying required)
 - **Monarch Money integration** — fetches live portfolio via GraphQL API, stores full JSON response locally
 - **Google Sheets integration** — OAuth2 Authorization Code Flow, no service accounts
 - **CSV fallback & portfolio switcher** — drop in local files and switch between portfolios on the fly
@@ -85,24 +86,31 @@ cp .env.example .env
 
 ### Monarch Money (recommended)
 
-Monarch Money authenticates via session cookies (with CSRF validation). Obtain your session cookie from the Monarch web app:
+Munger offers both direct in-app synchronization and command-line data fetching.
 
-1. Open [Monarch Money](https://app.monarch.com) in your browser and log in.
-2. Open DevTools (`Cmd + Option + I` or `F12`) → **Network** tab.
-3. Select any request to `graphql`.
-4. In **Request Headers**, copy the entire value of the `Cookie` header.
+#### 1. Direct In-App Sync & Login (Recommended)
+You do not need to use the CLI or copy cookies from browser DevTools:
+1. Launch Munger (web dashboard or desktop app).
+2. Click **Sync Monarch** (or **Connect Monarch**) in the header bar.
+3. If connecting for the first time or if your session has expired:
+   - Click **Log In via Browser (Google SSO / Password)**.
+   - Google Chrome opens directly to Monarch's login page.
+   - Authenticate with **Continue with Google** or your email and password.
+   - Munger automatically captures your session cookies, closes Chrome, updates your `.env`, and immediately refreshes your portfolio.
+4. For future updates, simply click **Sync Portfolio Now** inside the modal for a one-click live refresh.
 
-Fetch fresh data using your cookie:
+#### 2. Command Line / Manual Cookie
+If running headlessly or scripting updates, session cookies can still be passed via CLI or `.env`:
 
 ```bash
 python monarch.py --cookie "PASTE_COOKIE_STRING"
-# or set MONARCH_COOKIE in .env and simply run:
+# or set MONARCH_COOKIE in .env and run:
 python monarch.py
 ```
 
-*(Token authentication is also supported if you have an active API token: `python monarch.py --token YOUR_TOKEN` or via `MONARCH_TOKEN` in `.env`)*
+*(API token authentication is also supported: `python monarch.py --token YOUR_TOKEN` or via `MONARCH_TOKEN` in `.env`)*
 
-Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. Re-run `monarch.py` whenever you want fresh data, then hit **Refresh Data** in the dashboard. If the file is missing, the backend will safely fallback to your spreadsheet or CSV configuration.
+Set `MONARCH_JSON_PATH=monarch_response.json` in `.env` to use it as the data source. If the file is missing, the backend will safely fallback to your spreadsheet or CSV configuration.
 
 ### Google Sheets
 
