@@ -19,6 +19,7 @@ src-tauri/target/
 src-tauri/binaries/munger-backend*
 src-tauri/gen/
 build/
+dist/
 *.spec
 # Tauri configs must be committed (narrow exceptions to the *.json rule above)
 !src-tauri/tauri.conf.json

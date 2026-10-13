@@ -157,9 +157,12 @@ Munger keeps everything it owns in a plain folder on disk — the workspace:
 The local-first desktop shell wraps the exact same Python backend — no analytics rewrite. The Tauri shell (`src-tauri/`) spawns the backend as a sidecar binary, reads the loopback port it announces on stdout (`MUNGER_PORT=<port>`), and opens the main window on it. The backend serves both the API and the existing `static/index.html` frontend, so the desktop app is pixel-identical to the browser version.
 
 ```bash
-# one-time: Rust toolchain + Tauri CLI (https://v2.tauri.app/start/prerequisites/)
+# Build standalone installable packages (.dmg and .app in dist/):
+./scripts/package.sh
+
+# Or run during development:
 scripts/build-sidecar.sh   # PyInstaller -> src-tauri/binaries/munger-backend-<triple>
-tauri dev                    # or: tauri build   (produces the .dmg/.app)
+npx @tauri-apps/cli dev    # launches dev window
 ```
 
 - `sidecar.py` is the PyInstaller entrypoint: picks a free `127.0.0.1` port, prints `MUNGER_PORT=<port>`, runs uvicorn. `python sidecar.py` also works for debugging the protocol without Tauri.
