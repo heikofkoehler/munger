@@ -81,13 +81,21 @@ mkdir -p "$DIST"
 
 RELEASE_BUNDLE="$ROOT/src-tauri/target/release/bundle"
 
-# Copy DMG and App if on macOS
-if [[ -d "$RELEASE_BUNDLE/dmg" ]]; then
-  cp -R "$RELEASE_BUNDLE/dmg"/*.dmg "$DIST/" 2>/dev/null || true
-fi
-if [[ -d "$RELEASE_BUNDLE/macos" ]]; then
+# Copy App if on macOS and create clean standard DMG
+if [[ -d "$RELEASE_BUNDLE/macos/Munger.app" ]]; then
   rm -rf "$DIST/Munger.app"
-  cp -R "$RELEASE_BUNDLE/macos/Munger.app" "$DIST/" 2>/dev/null || true
+  cp -R "$RELEASE_BUNDLE/macos/Munger.app" "$DIST/"
+  
+  echo "--> Creating clean macOS disk image (.dmg)..."
+  STAGE=$(mktemp -d)
+  cp -R "$DIST/Munger.app" "$STAGE/"
+  ln -s /Applications "$STAGE/Applications"
+  VERSION=$(grep '"version"' "$ROOT/src-tauri/tauri.conf.json" | head -1 | awk -F '"' '{print $4}')
+  ARCH="$(uname -m)"
+  hdiutil create -volname "Munger" -srcfolder "$STAGE" -ov -format UDZO "$DIST/Munger_${VERSION}_${ARCH}.dmg"
+  rm -rf "$STAGE"
+elif [[ -d "$RELEASE_BUNDLE/dmg" ]]; then
+  cp -R "$RELEASE_BUNDLE/dmg"/*.dmg "$DIST/" 2>/dev/null || true
 fi
 
 # Copy Linux packages if present
