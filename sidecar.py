@@ -31,6 +31,11 @@ def main() -> None:
     except ImportError:
         pass
 
+    # Reserve sys.stdout for Tauri IPC (MUNGER_PORT=...). Route any stdout prints
+    # from imported modules or logging to stderr so they don't pollute the pipe.
+    real_stdout = sys.stdout
+    sys.stdout = sys.stderr
+
     # Import the app object directly (not "main:app") so PyInstaller's
     # static analysis bundles main.py and its core/data/metrics packages.
     # A string import would fail at runtime in the frozen binary.
@@ -49,10 +54,12 @@ def main() -> None:
     thread.start()
 
     # server.servers is assigned (and populated with listening sockets) only
-    # inside Server.startup(), so poll with getattr until it appears.
+    # inside Server.startup(), and server.started is set to True once ready.
     def _listening_port() -> int | None:
+        if not getattr(server, "started", False):
+            return None
         servers = getattr(server, "servers", None)
-        if servers:
+        if servers and len(servers) > 0 and servers[0].sockets:
             return servers[0].sockets[0].getsockname()[1]
         return None
 
@@ -70,7 +77,8 @@ def main() -> None:
             time.sleep(0.05)
 
     # Tauri reads the port from our stdout; flush so it never blocks on buffering.
-    print(f"MUNGER_PORT={port}", flush=True)
+    print(f"MUNGER_PORT={port}", file=real_stdout, flush=True)
+    sys.stdout = real_stdout
 
     thread.join()
 

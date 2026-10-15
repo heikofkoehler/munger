@@ -53,6 +53,7 @@ from metrics.portfolio import calculate_metrics, calculate_institutions, calcula
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot, CONC_THRESHOLD
 from metrics.tax import calculate_tax_buckets
 from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
+import monarch
 from core.monarch_auth import (
     get_monarch_status,
     persist_env_var,

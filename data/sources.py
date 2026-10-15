@@ -1,5 +1,8 @@
+import logging
 import os
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 EXPECTED_COLUMNS = [
     "account_id", "account_name", "account_mask", "institution_name",
@@ -104,11 +107,11 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, o
         if not os.path.exists(override_path):
             raise FileNotFoundError(f"Portfolio file not found: {override_path}")
         if override_path.endswith(".json"):
-            print(f"Loading from override JSON: {override_path}", flush=True)
+            logger.info(f"Loading from override JSON: {override_path}")
             from monarch import load_from_json
             return load_from_json(override_path)
         else:
-            print(f"Loading from override CSV: {override_path}", flush=True)
+            logger.info(f"Loading from override CSV: {override_path}")
             return load_from_csv(override_path)
 
     ds = (settings or {}).get("data_source", {}) or {}
@@ -122,14 +125,14 @@ def load(sheet_id: str = None, csv_path: str = None, monarch_json: str = None, o
         return kind == "auto" or kind == name
 
     if _want("monarch_json") and monarch_json and os.path.exists(monarch_json):
-        print(f"Loading from Monarch JSON: {monarch_json}", flush=True)
+        logger.info(f"Loading from Monarch JSON: {monarch_json}")
         from monarch import load_from_json
         return load_from_json(monarch_json)
     if _want("csv") and csv_path and os.path.exists(csv_path):
-        print(f"Loading from CSV: {csv_path}", flush=True)
+        logger.info(f"Loading from CSV: {csv_path}")
         return load_from_csv(csv_path)
     if _want("sheets") and sheet_id:
-        print(f"Loading from Google Sheets: {sheet_id}", flush=True)
+        logger.info(f"Loading from Google Sheets: {sheet_id}")
         return load_from_sheets(sheet_id)
 
     raise ValueError(

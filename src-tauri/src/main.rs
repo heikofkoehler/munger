@@ -61,13 +61,22 @@ async fn run_backend(app: tauri::AppHandle) -> Result<(), String> {
         .spawn()
         .map_err(|e| format!("sidecar spawn failed: {e}"))?;
 
-    // The sidecar prints "MUNGER_PORT=<port>" as its first stdout line.
+    // The sidecar prints "MUNGER_PORT=<port>" on stdout.
     let mut port: Option<String> = None;
     while let Some(event) = rx.recv().await {
         match event {
-            CommandEvent::Stdout(line) => {
-                if let Some(p) = String::from_utf8_lossy(&line).trim().strip_prefix("MUNGER_PORT=") {
-                    port = Some(p.to_string());
+            CommandEvent::Stdout(bytes) => {
+                let text = String::from_utf8_lossy(&bytes);
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if let Some(p) = trimmed.strip_prefix("MUNGER_PORT=") {
+                        port = Some(p.to_string());
+                        break;
+                    } else if !trimmed.is_empty() {
+                        eprintln!("munger-backend: {trimmed}");
+                    }
+                }
+                if port.is_some() {
                     break;
                 }
             }
