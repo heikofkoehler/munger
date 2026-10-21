@@ -2,6 +2,9 @@ import argparse
 import os
 import sys
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Local-first bootstrap (before imports that read env at import time).
 from core.workspace import ensure_workspace
 from core.settings import load_settings, init_settings
