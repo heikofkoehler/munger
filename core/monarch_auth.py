@@ -219,7 +219,7 @@ def extract_chrome_monarch_cookies(profile_name: Optional[str] = None) -> str:
             conn = sqlite3.connect(temp_db)
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT name, value, encrypted_value FROM cookies WHERE host_key LIKE '%monarch%'"
+                "SELECT host_key, name, value, encrypted_value FROM cookies WHERE host_key LIKE '%monarch%'"
             )
             rows = cursor.fetchall()
             conn.close()
@@ -228,7 +228,7 @@ def extract_chrome_monarch_cookies(profile_name: Optional[str] = None) -> str:
                 continue
 
             cookies = {}
-            for name, val, enc_val in rows:
+            for host_key, name, val, enc_val in rows:
                 if val:
                     cookies[name] = val
                 elif enc_val:
@@ -239,10 +239,23 @@ def extract_chrome_monarch_cookies(profile_name: Optional[str] = None) -> str:
                         padding_len = decrypted[-1]
                         if padding_len <= 16:
                             decrypted = decrypted[:-padding_len]
-                        cookies[name] = decrypted.decode("utf-8", errors="ignore")
+                        # In Chrome 127+, a 32-byte SHA-256 domain hash is prepended to the plaintext.
+                        if len(decrypted) > 32 and (
+                            hashlib.sha256(host_key.encode()).digest() == decrypted[:32]
+                            or any(b < 32 or b > 126 for b in decrypted[:32])
+                        ):
+                            decrypted = decrypted[32:]
+                        val_str = decrypted.decode("utf-8", errors="ignore")
+                        # Only keep clean printable ASCII values
+                        if all(32 <= ord(c) <= 126 for c in val_str):
+                            cookies[name] = val_str
 
             if "session_id" in cookies and "csrftoken" in cookies:
-                cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
+                # Include essential session credentials first
+                ordered_keys = ["session_id", "csrftoken"] + [
+                    k for k in cookies if k not in ("session_id", "csrftoken")
+                ]
+                cookie_str = "; ".join([f"{k}={cookies[k]}" for k in ordered_keys])
                 logger.info(f"Successfully extracted Monarch session cookies from Chrome profile '{prof}'.")
                 return cookie_str
             else:
