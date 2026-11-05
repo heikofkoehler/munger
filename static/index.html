@@ -1039,6 +1039,73 @@
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+    /* ── Export Dropdown ─────────────────────────────────────── */
+    .export-dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .export-header-btn {
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .export-header-btn:hover {
+      border-color: var(--accent-teal);
+      background: var(--bg-card-2);
+    }
+    .export-menu {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+      min-width: 230px;
+      z-index: 200;
+      padding: 6px;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .export-menu.open {
+      display: flex;
+    }
+    .export-menu-item {
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      text-align: left;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.12s;
+    }
+    .export-menu-item:hover {
+      background: var(--bg-card-2);
+      color: var(--accent-teal);
+    }
+    .export-menu-sub {
+      font-size: 10.5px;
+      color: var(--text-muted);
+      display: block;
+      margin-top: 2px;
+      font-weight: 400;
+    }
   </style>
 </head>
 <body>
@@ -1047,11 +1114,32 @@
 
 <header>
   <div class="brand"><span>M</span>UNGER</div>
-  <div style="display: flex; gap: 1rem; align-items: center;">
+  <div style="display: flex; gap: 0.75rem; align-items: center;">
     <select id="portfolio-selector" onchange="switchPortfolio(this.value)" style="background:var(--bg-card); color:var(--text-primary); border:1px solid var(--border); border-radius:4px; padding:4px 8px; font-size:12px; font-weight:500; cursor:pointer;">
       <option value="">Loading portfolios...</option>
     </select>
     <button id="theme-btn" onclick="toggleTheme()" style="background:transparent; border:none; color:var(--text-secondary); cursor:pointer; font-size:18px;" title="Toggle theme">🌓</button>
+    <div class="export-dropdown" id="export-dropdown">
+      <button id="export-btn" onclick="toggleExportMenu(event)" class="export-header-btn" title="Export portfolio and analytical report">
+        <span>⬇</span> <span>Export</span> <span style="font-size: 10px; opacity: 0.7;">▾</span>
+      </button>
+      <div id="export-menu" class="export-menu">
+        <button id="export-pdf-btn" class="export-menu-item" onclick="exportPortfolio('pdf')">
+          <span style="font-size: 16px;">📑</span>
+          <div>
+            <div>Export PDF Report</div>
+            <span class="export-menu-sub">Executive summary, risk, tax & holdings</span>
+          </div>
+        </button>
+        <button id="export-csv-btn" class="export-menu-item" onclick="exportPortfolio('csv')">
+          <span style="font-size: 16px;">📊</span>
+          <div>
+            <div>Export CSV with Analysis</div>
+            <span class="export-menu-sub">Full multi-section spreadsheet data</span>
+          </div>
+        </button>
+      </div>
+    </div>
     <button id="monarch-header-btn" onclick="openMonarchModal()" class="monarch-header-btn" title="Sync or connect Monarch Money">
       <span class="monarch-glyph">◆</span> <span id="monarch-header-btn-text">Sync Monarch</span>
     </button>
@@ -5117,6 +5205,57 @@ Where:
       }
     } catch (e) {
       showToast('Error saving credentials: ' + e.message, 'error');
+    }
+  }
+
+  // ── Export Portfolio (PDF / CSV) ──────────────────────────────
+  function toggleExportMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('export-menu');
+    if (menu) menu.classList.toggle('open');
+  }
+
+  document.addEventListener('click', (e) => {
+    const dropdown = document.getElementById('export-dropdown');
+    const menu = document.getElementById('export-menu');
+    if (menu && dropdown && !dropdown.contains(e.target)) {
+      menu.classList.remove('open');
+    }
+  });
+
+  async function exportPortfolio(format) {
+    const menu = document.getElementById('export-menu');
+    if (menu) menu.classList.remove('open');
+
+    const label = format === 'pdf' ? 'PDF Report' : 'CSV Analysis';
+    showToast(`Generating ${label}…`, 'info', 2500);
+
+    try {
+      const res = await fetch(`/api/export/${format}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(errText || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition') || '';
+      const match = cd.match(/filename="([^"]+)"/);
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const filename = match
+        ? match[1]
+        : (format === 'pdf' ? `munger_portfolio_report_${today}.pdf` : `munger_portfolio_analysis_${today}.csv`);
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      showToast(`${label} exported (${filename})`, 'success', 4000);
+    } catch (err) {
+      showToast(`Export failed: ${err.message}`, 'error', 6000);
     }
   }
 

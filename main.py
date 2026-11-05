@@ -9,10 +9,11 @@ import logging
 import os
 import sys
 import traceback
+from datetime import datetime
 from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse, FileResponse
+from fastapi.responses import JSONResponse, RedirectResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from dotenv import load_dotenv
@@ -53,6 +54,7 @@ from metrics.portfolio import calculate_metrics, calculate_institutions, calcula
 from metrics.risk import calculate_risk_metrics, calculate_efficiency_metrics, save_risk_snapshot, CONC_THRESHOLD
 from metrics.tax import calculate_tax_buckets
 from metrics.valuation import calculate_valuation_metrics, clear_valuation_cache
+from core.export import build_export_payload, generate_csv_report, generate_pdf_report
 import monarch
 from core.monarch_auth import (
     get_monarch_status,
@@ -232,6 +234,60 @@ def valuation():
         _cache["valuation"] = calculate_valuation_metrics(_cache["summary"]["positions"])
     logger.info(f"API: valuation returning {len(_cache.get('valuation', []))} items")
     return _cache.get("valuation", [])
+
+
+def _prepare_export_payload() -> dict:
+    """Gather all portfolio analytics for CSV/PDF export."""
+    if not _cache.get("summary") or "df_raw" not in _cache or "df_clean" not in _cache:
+        _build_cache(source_path=_current_source)
+    if not _cache.get("summary"):
+        raise RuntimeError("Portfolio cache is not initialized.")
+
+    if "risk" not in _cache:
+        _cache["risk"] = calculate_risk_metrics(_cache["df_clean"])
+    if "tax" not in _cache:
+        _cache["tax"] = calculate_tax_buckets(normalize_asset_class(_cache["df_raw"]))
+    if "efficiency" not in _cache:
+        _cache["efficiency"] = calculate_efficiency_metrics(_cache["df_clean"])
+
+    return build_export_payload(
+        summary=_cache["summary"],
+        df_raw=_cache["df_raw"],
+        df_clean=_cache["df_clean"],
+        risk=_cache.get("risk"),
+        tax=_cache.get("tax"),
+        efficiency=_cache.get("efficiency"),
+        market=_cache.get("market"),
+        valuation=_cache.get("valuation"),
+    )
+
+
+@app.get("/api/export/csv")
+def export_csv():
+    """Export the full portfolio and analytical breakdown as a downloadable CSV file."""
+    payload = _prepare_export_payload()
+    csv_text = generate_csv_report(payload)
+    date_tag = datetime.now().strftime("%Y%m%d")
+    filename = f"munger_portfolio_analysis_{date_tag}.csv"
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/api/export/pdf")
+def export_pdf():
+    """Export the full portfolio and analytical report as a downloadable PDF file."""
+    payload = _prepare_export_payload()
+    pdf_bytes = generate_pdf_report(payload)
+    date_tag = datetime.now().strftime("%Y%m%d")
+    filename = f"munger_portfolio_report_{date_tag}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/snapshots")

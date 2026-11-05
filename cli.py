@@ -17,8 +17,10 @@ os.environ.setdefault("CONC_THRESHOLD", str(SETTINGS.get("concentration_threshol
 from core.config import check_gitignore
 from data.sources import load
 from data.normalization import deduplicate, normalize_asset_class
-from metrics.portfolio import calculate_metrics
-from metrics.risk import check_concentration, CONC_THRESHOLD
+from metrics.portfolio import calculate_metrics, calculate_institutions
+from metrics.risk import check_concentration, calculate_risk_metrics, calculate_efficiency_metrics, CONC_THRESHOLD
+from metrics.tax import calculate_tax_buckets
+from core.export import build_export_payload, generate_csv_report, generate_pdf_report
 
 
 def _print_snapshots():
@@ -61,6 +63,10 @@ def main():
                         help="list workspace snapshots instead of the portfolio summary")
     parser.add_argument("--init", action="store_true",
                         help="create <workspace>/settings.json with defaults (never overwrites)")
+    parser.add_argument("--export-csv", metavar="PATH",
+                        help="export full portfolio and analysis report to CSV file")
+    parser.add_argument("--export-pdf", metavar="PATH",
+                        help="export full portfolio and analysis report to PDF file")
     args = parser.parse_args()
 
     if args.init:
@@ -80,6 +86,35 @@ def main():
     df = normalize_asset_class(df)
     metrics = calculate_metrics(df)
     concentration = check_concentration(df)
+
+    if args.export_csv or args.export_pdf:
+        risk = calculate_risk_metrics(df)
+        tax = calculate_tax_buckets(normalize_asset_class(df_raw))
+        efficiency = calculate_efficiency_metrics(df)
+        summary_data = {
+            **metrics,
+            "institutions": calculate_institutions(df_raw),
+            "concentration": [f for f in risk["true_exposure"] if f["flagged"]],
+            "risk_threshold": CONC_THRESHOLD,
+            "active_portfolio": "CLI",
+        }
+        payload = build_export_payload(
+            summary=summary_data,
+            df_raw=df_raw,
+            df_clean=df,
+            risk=risk,
+            tax=tax,
+            efficiency=efficiency,
+        )
+        if args.export_csv:
+            with open(args.export_csv, "w", encoding="utf-8") as f:
+                f.write(generate_csv_report(payload))
+            print(f"Exported CSV analysis report to: {args.export_csv}")
+        if args.export_pdf:
+            with open(args.export_pdf, "wb") as f:
+                f.write(generate_pdf_report(payload))
+            print(f"Exported PDF analysis report to: {args.export_pdf}")
+        return
 
     try:
         from tabulate import tabulate
